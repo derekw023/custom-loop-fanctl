@@ -89,6 +89,7 @@ dependencies = [
  "cortex-m 0.6.7",
  "cortex-m-rt",
  "panic-halt",
+ "rp-hal",
 ]
 
 [[package]]
@@ -152,9 +153,9 @@ checksum = "de96540e0ebde571dc55c73d60ef407c653844e6f9a1e2fdbd40c07b9252d812"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.24"
+version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e0704ee1a7e00d7bb417d0770ea303c1bccbabf0ef1667dae92b5967f5f8a71"
+checksum = "a152013215dca273577e18d2bf00fa862b89b24169fb78c4c95aeb07992c9cec"
 dependencies = [
  "unicode-xid",
 ]
@@ -173,6 +174,17 @@ name = "r0"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2a38df5b15c8d5c7e8654189744d8e396bddc18ad48041a500ce52d6948941f"
+
+[[package]]
+name = "rp-hal"
+version = "0.0.2"
+source = "git+https://github.com/derekw023/rp-microcontroller-rs#cfdbdb307ed08410adc9c390b6f822ecd5ec30d7"
+dependencies = [
+ "bare-metal",
+ "cortex-m 0.7.2",
+ "embedded-hal",
+ "vcell",
+]
 
 [[package]]
 name = "rustc_version"
@@ -206,9 +218,9 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
 name = "syn"
-version = "1.0.67"
+version = "1.0.68"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6498a9efc342871f91cc2d0d694c674368b4ceb40f62b65a7a08c3792935e702"
+checksum = "3ce15dd3ed8aa2f8eeac4716d6ef5ab58b6b9256db41d7e1a0224c2788e8fd87"
 dependencies = [
  "proc-macro2",
  "quote",
