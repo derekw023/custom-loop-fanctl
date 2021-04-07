@@ -10,4 +10,10 @@ edition = "2018"
 cortex-m = "0.6.0"
 cortex-m-rt = "0.6.10"
 panic-halt = "0.2.0"
-rp-hal = { git = "https://github.com/derekw023/rp-microcontroller-rs" }
+usbd-serial = "0.1.1"
+usb-device = "0.2.7"
+
+
+[dependencies.itsybitsy_m0]
+version = "0.10.0"
+features = ["usb"]

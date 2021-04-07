@@ -1,21 +1,70 @@
 #![no_std]
 #![no_main]
 
-// pick a panicking behavior
-use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch panics
-                     // use panic_abort as _; // requires nightly
-                     // use panic_itm as _; // logs messages over ITM; requires ITM support
-                     // use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
+extern crate itsybitsy_m0 as hal;
+
+extern crate usb_device;
+extern crate usbd_serial;
+
+use hal::clock::GenericClockController;
+use hal::entry;
+use hal::pac::{interrupt, CorePeripherals, Peripherals};
+// use hal::prelude::*;
+
+use usb_device::prelude::*;
+use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
 use cortex_m::asm;
-use cortex_m_rt::entry;
-use;
 
 #[entry]
 fn main() -> ! {
-    asm::nop(); // To not have main optimize to abort in release mode, remove when you add code
+    let mut peripherals = Peripherals::take().unwrap();
+    let mut core = CorePeripherals::take().unwrap();
+
+    let mut clocks = GenericClockController::with_internal_32kosc(
+        peripherals.GCLK,
+        &mut peripherals.PM,
+        &mut peripherals.SYSCTRL,
+        &mut peripherals.NVMCTRL,
+    );
+
+    let mut pins = hal::Pins::new(peripherals.PORT);
+    let mut red_led = pins.d13.into_open_drain_output(&mut pins.port);
+
+    let bus_allocator = hal::usb_allocator(
+        peripherals.USB,
+        &mut clocks,
+        &mut peripherals.PM,
+        pins.usb_dm,
+        pins.usb_dp,
+        &mut pins.port,
+    );
+
+    let mut serial = SerialPort::new(&bus_allocator);
+    let mut bus = UsbDeviceBuilder::new(&bus_allocator, UsbVidPid(0x16c0, 0x27dd))
+        .manufacturer("Fake company")
+        .product("Serial port")
+        .serial_number("TEST")
+        .device_class(USB_CLASS_CDC)
+        .build();
 
     loop {
-        // your code goes here
+        if !bus.poll(&mut [&mut serial]) {
+            continue;
+        }
+        let mut buf = [0u8; 64];
+        let count;
+
+        match serial.read(&mut buf[..]) {
+            Ok(c) => {
+                // count bytes were read to &buf[..count]
+                count = c;
+            }
+            Err(UsbError::WouldBlock) => continue, // No data received
+            Err(_) => continue,                    // An error occurred
+        };
+
+        red_led.toggle();
+        serial.write(&buf[..count]).unwrap();
     }
 }
