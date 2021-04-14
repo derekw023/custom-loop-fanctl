@@ -1,70 +1,50 @@
 #![no_std]
 #![no_main]
 
-extern crate itsybitsy_m0 as hal;
+extern crate stm32g0xx_hal as hal;
 
-extern crate usb_device;
-extern crate usbd_serial;
+extern crate panic_halt;
 
-use hal::clock::GenericClockController;
-use hal::entry;
-use hal::pac::{interrupt, CorePeripherals, Peripherals};
-// use hal::prelude::*;
+use hal::prelude::*;
 
-use usb_device::prelude::*;
-use usbd_serial::{SerialPort, USB_CLASS_CDC};
+use hal::analog::adc::{Precision, SampleTime};
+use hal::stm32::{CorePeripherals, Peripherals};
 
-use cortex_m::asm;
+use cortex_m_rt::entry;
 
 #[entry]
 fn main() -> ! {
-    let mut peripherals = Peripherals::take().unwrap();
-    let mut core = CorePeripherals::take().unwrap();
+    let peripherals = Peripherals::take().unwrap();
+    let core = CorePeripherals::take().unwrap();
 
-    let mut clocks = GenericClockController::with_internal_32kosc(
-        peripherals.GCLK,
-        &mut peripherals.PM,
-        &mut peripherals.SYSCTRL,
-        &mut peripherals.NVMCTRL,
-    );
+    let mut rcc = peripherals.RCC.constrain();
 
-    let mut pins = hal::Pins::new(peripherals.PORT);
-    let mut red_led = pins.d13.into_open_drain_output(&mut pins.port);
+    let mut delay = core.SYST.delay(&mut rcc);
 
-    let bus_allocator = hal::usb_allocator(
-        peripherals.USB,
-        &mut clocks,
-        &mut peripherals.PM,
-        pins.usb_dm,
-        pins.usb_dp,
-        &mut pins.port,
-    );
+    let pins = peripherals.GPIOA.split(&mut rcc);
+    let pwm = peripherals.TIM1.pwm(10.khz(), &mut rcc);
 
-    let mut serial = SerialPort::new(&bus_allocator);
-    let mut bus = UsbDeviceBuilder::new(&bus_allocator, UsbVidPid(0x16c0, 0x27dd))
-        .manufacturer("Fake company")
-        .product("Serial port")
-        .serial_number("TEST")
-        .device_class(USB_CLASS_CDC)
-        .build();
+    let mut fan_level = pwm.bind_pin(pins.pa8); // D
+    let fan_max = fan_level.get_max_duty();
+    fan_level.enable();
 
+    let mut converter = peripherals.ADC.constrain(&mut rcc);
+
+    converter.set_sample_time(SampleTime::T_80);
+    converter.set_precision(Precision::B_12);
+    delay.delay(20.us()); // Wait for ADC voltage regulator to stabilize
+
+    let mut temp_sensor = pins.pa0.into_analog();
+
+    //TODO: Temperature conversion
+    //TODO: Fan curve implementation
     loop {
-        if !bus.poll(&mut [&mut serial]) {
-            continue;
-        }
-        let mut buf = [0u8; 64];
-        let count;
-
-        match serial.read(&mut buf[..]) {
-            Ok(c) => {
-                // count bytes were read to &buf[..count]
-                count = c;
-            }
-            Err(UsbError::WouldBlock) => continue, // No data received
-            Err(_) => continue,                    // An error occurred
-        };
-
-        red_led.toggle();
-        serial.write(&buf[..count]).unwrap();
+        let water_temp: u16 = converter.read(&mut temp_sensor).expect("ADC read failed");
+        fan_level.set_duty(if water_temp > fan_max {
+            fan_max
+        } else {
+            water_temp
+        });
+        delay.delay(100.ms());
     }
 }
