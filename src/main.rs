@@ -1,19 +1,14 @@
 #![no_std]
 #![no_main]
 
-extern crate stm32g0xx_hal as hal;
-
-extern crate panic_halt;
+use cortex_m_rt::entry;
+use hal::hal::digital::v2::OutputPin;
+use hal::pac;
+use hal::sio::Sio;
+use panic_halt as _;
+use rp2040_hal as hal;
 
 use hal::prelude::*;
-
-use hal::analog::adc::{Precision, SampleTime};
-use hal::stm32::{CorePeripherals, Peripherals};
-
-use core::cmp::{PartialEq, PartialOrd};
-use core::convert::From;
-
-use cortex_m_rt::entry;
 
 #[derive(PartialEq, PartialOrd)]
 pub struct Degrees(pub f32);
@@ -45,24 +40,15 @@ impl From<u16> for Degrees {
 
 #[entry]
 fn main() -> ! {
-    let peripherals = Peripherals::take().unwrap();
-    let core = CorePeripherals::take().unwrap();
+    let peripherals = pac::Peripherals::take().unwrap();
+    let core = pac::CorePeripherals::take().unwrap();
 
-    let mut rcc = peripherals.RCC.constrain();
+    let mut converter = unimplemented!();
 
-    let mut delay = core.SYST.delay(&mut rcc);
+    let mut delay = unimplemented!();
 
-    let pins = peripherals.GPIOA.split(&mut rcc);
-    let pwm = peripherals.TIM1.pwm(10.khz(), &mut rcc);
+    let mut fan_level = unimplemented!();
 
-    let mut fan_level = pwm.bind_pin(pins.pa8); // D
-    let fan_max = fan_level.get_max_duty();
-    fan_level.enable();
-
-    let mut converter = peripherals.ADC.constrain(&mut rcc);
-
-    converter.set_sample_time(SampleTime::T_80);
-    converter.set_precision(Precision::B_12);
     delay.delay(20.us()); // Wait for ADC voltage regulator to stabilize
 
     let mut temp_sensor = pins.pa0.into_analog();
@@ -76,6 +62,6 @@ fn main() -> ! {
         } else {
             0
         });
-        delay.delay(100.ms());
+        delay.delay(1000.ms());
     }
 }

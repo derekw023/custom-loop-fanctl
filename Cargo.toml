@@ -9,7 +9,4 @@ edition = "2018"
 [dependencies]
 cortex-m-rt = "0.6.13"
 panic-halt = "0.2.0"
-
-[dependencies.stm32g0xx-hal]
-version = "0.1.0"
-features = ["stm32g031"]
+rp2040-hal = { path = "rp-hal/rp2040-hal" }
