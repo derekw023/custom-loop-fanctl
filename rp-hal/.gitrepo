@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = git://github.com:/derekw023/rp-hal
+	branch = main
+	commit = 553263a5fffcf4cb410aa12bf2f066ffad852334
+	parent = 9bc290be6e2a7ae1caad49a2ed25fb533657e24a
+	method = merge
+	cmdver = 0.4.3
