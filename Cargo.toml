@@ -18,6 +18,6 @@ cortex-m-rt = "0.6.13"
 embedded-hal = "0.2.6"
 panic-halt = "0.2.0"
 tiny_2040 = { path = "rp-hal/boards/tiny_2040" }
-rp2040-boot2 = { git = "https://github.com/rp-rs/rp2040-boot2-rs", branch="main" }
+rp2040-boot2 = { version = "0.1.2" }
 
 [dev-dependencies]
