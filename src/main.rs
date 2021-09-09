@@ -2,17 +2,15 @@
 #![no_main]
 
 use cortex_m_rt::entry;
-use embedded_hal::PwmPin;
 use hal::pac;
 use hal::sio::Sio;
 use hal::watchdog::Watchdog;
 extern crate panic_halt;
+use hal::pwm::Slices;
 use tiny_2040::embedded_time::duration::*;
 use tiny_2040::hal;
 use tiny_2040::hal::adc::Adc;
 use tiny_2040::hal::clocks::ClockSource;
-use tiny_2040::hal::gpio::{OutputDriveStrength::*, OutputSlewRate::*};
-use tiny_2040::hal::pwm::Pwm0;
 
 mod fan_controller;
 
@@ -40,17 +38,8 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
-    // Configure PWMs first because HAL consumes PAC resources by reference
-    let mut fan = Pwm0::new(0);
-    fan.default_config(
-        &mut peripherals.PWM,
-        &mut peripherals.PADS_BANK0,
-        &mut peripherals.IO_BANK0,
-        &mut peripherals.RESETS,
-    );
-
     let sio = Sio::new(peripherals.SIO);
-    let mut board = tiny_2040::Tiny2040::new(
+    let board = tiny_2040::Tiny2040::new(
         peripherals.IO_BANK0,
         peripherals.PADS_BANK0,
         sio.gpio_bank0,
@@ -61,15 +50,15 @@ fn main() -> ! {
     let mut delay =
         cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.get_freq().integer());
 
-    fan.enable();
-    fan.set_top(u16::MAX / 16); // Increase frequency by a factor of 16 to push it out of the audible range
-
-    board.pins.gpio0.set_drive_strength(EightMilliAmps);
-    board.pins.gpio0.set_slew_rate(Fast);
+    // Configure PWMs
+    let mut slices = Slices::new(peripherals.PWM, &mut peripherals.RESETS);
+    slices.pwm0.set_top(u16::MAX / 16);
+    let mut fan = slices.pwm0.channel_a;
+    let _fanpin = fan.output_to(board.pins.gpio0);
 
     let mut converter = Adc::new(peripherals.ADC, &mut peripherals.RESETS);
 
-    // Initialize fan control blocks
+    // Initialize fan control block
     let mut controller = FanController::new(
         board.pins.adc0.into_floating_input(),
         fan,

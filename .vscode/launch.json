@@ -5,24 +5,15 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "gnu-debugger",
-            "request": "launch",
-            "name": "Debug executable 'custom-loop-fanctl'",
-            "debugServer": 2331,
-            "cargo": {
-                "args": [
-                    "build",
-                    "--bin=custom-loop-fanctl",
-                    "--package=custom-loop-fanctl"
-                ],
-                "filter": {
-                    "name": "custom-loop-fanctl",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}",
-            "program": "${workspaceFolder}/target/thumbv6m-none-eabi/debug/custom-loop-fanctl"
+            "name": "Remote lldb",
+            "type": "lldb",
+            "request": "custom",
+            "targetCreateCommands": [
+                "target create ${workspaceFolder}/target/thumbv6m-none-eabi/debug/custom-loop-fanctl"
+            ],
+            "processCreateCommands": [
+                "gdb-remote localhost:2331"
+            ]
         },
     ]
 }
