@@ -1,0 +1,28 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "gnu-debugger",
+            "request": "launch",
+            "name": "Debug executable 'custom-loop-fanctl'",
+            "debugServer": 2331,
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=custom-loop-fanctl",
+                    "--package=custom-loop-fanctl"
+                ],
+                "filter": {
+                    "name": "custom-loop-fanctl",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/target/thumbv6m-none-eabi/debug/custom-loop-fanctl"
+        },
+    ]
+}
