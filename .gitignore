@@ -1,3 +1,4 @@
 /target
 /rp-hal/ 
 Cargo.lock
+.DS_Store
