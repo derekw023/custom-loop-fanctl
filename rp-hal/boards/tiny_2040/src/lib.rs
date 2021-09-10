@@ -23,9 +23,18 @@ hal::bsp_pins!(
     Gpio5 { name: gpio5 },
     Gpio6 { name: gpio6 },
     Gpio7 { name: gpio7 },
-    Gpio18 { name: led_r },
-    Gpio19 { name: led_g },
-    Gpio20 { name: led_b },
+    Gpio18 {
+        name: led_r,
+        aliases: { PushPullOutput: LedR }
+    },
+    Gpio19 {
+        name: led_g,
+        aliases: { PushPullOutput: LedG }
+    },
+    Gpio20 {
+        name: led_b,
+        aliases: { PushPullOutput: LedB }
+    },
     Gpio26 { name: adc0 },
     Gpio27 { name: adc1 },
     Gpio28 { name: adc2 },
