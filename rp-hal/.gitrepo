@@ -6,7 +6,7 @@
 [subrepo]
 	remote = git@github.com:derekw023/rp-hal
 	branch = tiny-2040-bsp
-	commit = 77356cf5b99188fd8c7c672e621e97f1787a964a
+	commit = 06a5b1d9b80f3a4944ad33753740708ed064588c
 	parent = bd3456bb7e926a5dffa2e207edb63c0b77ff5a86
 	method = merge
 	cmdver = 0.4.3
