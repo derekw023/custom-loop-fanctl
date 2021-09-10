@@ -5,7 +5,7 @@ use embedded_hal::adc::OneShot;
 use embedded_hal::PwmPin;
 
 /// Contains state and APIs to implement a simple proportional controller with saturation
-pub struct FanController<T, PIN, ADC, OUTPIN> {
+pub struct FanController<'a, T, PIN, ADC, OUTPIN> {
     max_duty: T,
     min_duty: T,
     // Do not store max and min temp, as they are only necessary for calculating the curve params. cache those instead
@@ -14,12 +14,16 @@ pub struct FanController<T, PIN, ADC, OUTPIN> {
     m: f32,
     b: f32,
 
+    /// Cached last temperature reading
+    pub last_temp: Degrees,
+    pub current_duty: T,
+
     /// Temperature Sensor
     sensor: TemperatureSensor<ADC, T, PIN>,
-    out_pin: OUTPIN,
+    out_pin: &'a mut OUTPIN,
 }
 
-impl<ADC, PIN, OUTPIN> FanController<u16, PIN, ADC, OUTPIN>
+impl<'a, ADC, PIN, OUTPIN> FanController<'a, u16, PIN, ADC, OUTPIN>
 where
     ADC: OneShot<ADC, u16, PIN>,
     PIN: Channel<ADC, ID = u8>,
@@ -35,7 +39,7 @@ where
     /// *  `min_temp` - Low temperature saturation point
     pub fn new(
         pin: PIN,
-        out_pin: OUTPIN,
+        out_pin: &'a mut OUTPIN,
         max_duty: u16,
         min_duty: u16,
         max_temp: Degrees,
@@ -55,6 +59,8 @@ where
             min_duty,
             m: slope,
             b,
+            current_duty: 0,
+            last_temp: Degrees(65.),
             sensor,
             out_pin,
         }
@@ -63,12 +69,12 @@ where
     /// Implement the configured fan curve and return a duty cycle
     pub fn fan_curve(&mut self, converter: &mut ADC) {
         // read temperature
-        let val = self.sensor.read_temp(converter);
+        self.last_temp = self.sensor.read_temp(converter);
 
         // Simple linear fit with saturation, IE basic proportional-only PID loop
-        let desired_duty = self.m * val.0 + self.b;
+        let desired_duty = self.m * self.last_temp.0 + self.b;
 
-        let new_duty: u16 = if desired_duty > f32::from(self.max_duty) {
+        self.current_duty = if desired_duty > f32::from(self.max_duty) {
             self.max_duty
         } else if desired_duty < f32::from(self.min_duty) {
             self.min_duty
@@ -76,6 +82,6 @@ where
             desired_duty as u16
         };
 
-        self.out_pin.set_duty(new_duty.into());
+        self.out_pin.set_duty(self.current_duty.into());
     }
 }

@@ -1,9 +1,10 @@
 use super::dsp::MovingAverage;
+use core::fmt::Display;
 use embedded_hal::adc::Channel;
 use embedded_hal::adc::OneShot;
 
 /// Type for holding temperature readings with context
-#[derive(PartialEq, PartialOrd)]
+#[derive(PartialEq, PartialOrd, Copy, Clone)]
 pub struct Degrees(pub f32);
 
 // Conversion of ADC readings to degrees is specific to ADC config and circuit implementation, provide here a conversion that specifies our circuit
@@ -32,6 +33,12 @@ impl From<u16> for Degrees {
         // C = −4.2725*R+65.753 // R is in kilo-ohms, not ohms
 
         Degrees(-4.2725 * r / 1000. + 65.753)
+    }
+}
+
+impl Display for Degrees {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
