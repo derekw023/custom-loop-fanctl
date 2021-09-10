@@ -9,6 +9,20 @@
 			],
 			"group": "build",
 			"label": "rust: cargo build"
-		}
+		},
+		{
+			"label": "gdb flash",
+			"type": "shell",
+			"command": "arm-none-eabi-gdb -x jlink-flash.gdbinit ${workspaceFolder}/target/thumbv6m-none-eabi/debug/custom-loop-fanctl"
+		},
+		{
+			"group": "build",
+			"label": "build and flash",
+			"dependsOn": [
+				"rust: cargo build",
+				"gdb flash"
+			],
+			"dependsOrder": "sequence"
+		},
 	]
 }

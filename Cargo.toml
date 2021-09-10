@@ -19,5 +19,6 @@ embedded-hal = "0.2.6"
 panic-halt = "0.2.0"
 tiny_2040 = { path = "rp-hal/boards/tiny_2040" }
 rp2040-boot2 = { version = "0.1.2" }
+jlink_rtt = { version = "0.2.0" }
 
 [dev-dependencies]

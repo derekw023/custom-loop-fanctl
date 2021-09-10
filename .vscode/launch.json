@@ -8,12 +8,47 @@
             "name": "Remote lldb",
             "type": "lldb",
             "request": "custom",
+            "preLaunchTask": "build and flash",
             "targetCreateCommands": [
-                "target create ${workspaceFolder}/target/thumbv6m-none-eabi/debug/custom-loop-fanctl"
+                "target create ${cargo:program}"
             ],
             "processCreateCommands": [
                 "gdb-remote localhost:2331"
-            ]
+            ],
+            "cargo": {
+                "args": [
+                    "build"
+                ],
+            }
         },
-    ]
-}
+        {
+            "name": "cmdebug",
+            "cwd": "${workspaceRoot}",
+            "executable": "./target/thumbv6m-none-eabi/debug/custom-loop-fanctl",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "jlink",
+            "serverpath": "C:\\Program Files\\SEGGER\\JLink\\JLinkGDBServer.exe",
+            "interface": "swd",
+            "device": "RP2040_M0_0",
+            "runToMain": true,
+            "preRestartCommands": [
+                "load",
+                "enable breakpoint",
+                "monitor reset"
+            ],
+            "preLaunchTask": "rust: cargo build",
+            "svdFile": "./rp2040.svd",
+            "rttConfig": {
+                "enabled": true,
+                "address": "auto",
+                // "clearSearch": false    // OpenOCD users may have to un-comment this
+                "decoders": [
+                    {
+                        "port": 0,
+                        "type": "console"
+                    }
+                ]
+            }
+        ]
+    }
