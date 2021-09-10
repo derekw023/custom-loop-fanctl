@@ -1,102 +1,130 @@
 #![no_std]
 #![no_main]
+// Panics are OK here as is using these libraries the way they want to be used
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::wildcard_imports)]
 
-use cortex_m_rt::entry;
-use embedded_hal::PwmPin;
-use hal::pac;
-use hal::pwm::Slices;
-use hal::sio::Sio;
-use hal::watchdog::Watchdog;
-use tiny_2040::embedded_time::duration::*;
-use tiny_2040::hal;
-use tiny_2040::hal::adc::Adc;
-use tiny_2040::hal::clocks::ClockSource;
-extern crate panic_halt;
+use hal::timer::{Alarm, Alarm0, Alarm2};
+use pimoroni_tiny2040 as bsp;
+
+use bsp::entry;
+use bsp::hal;
+use hal::pac::interrupt;
+
+use embedded_hal::{digital::v2::InputPin, prelude::*};
+use util::ControllerPeripherals;
 mod fan_controller;
 use embedded_hal::digital::v2::OutputPin;
-extern crate jlink_rtt;
-use core::fmt::Write;
+use panic_halt as _;
 
-use crate::fan_controller::{controller::FanController, temperature::Degrees};
+use crate::{
+    fan_controller::{controller::FanCurve, temperature::Degrees},
+    util::PWM_TICKS,
+};
 
-// Second stage bootloader configures flash
-#[link_section = ".boot2"]
-#[used]
-pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER;
+mod error;
+mod util;
+
+const HEARTBEAT_PERIOD: fugit::MicrosDurationU32 = fugit::MicrosDurationU32::Hz(100);
+const STATUS_PERIOD: fugit::MicrosDurationU32 = fugit::MicrosDurationU32::Hz(1);
+
+static mut CURRENT_TEMP: Degrees = Degrees::from_int(65);
+static mut CURRENT_DUTY: u16 = 0;
+
+static mut PERIPHERALS: Option<ControllerPeripherals> = None;
+static mut ALARM0: Option<Alarm0> = None;
+static mut ALARM2: Option<Alarm2> = None;
 
 #[entry]
 fn main() -> ! {
-    let mut output = jlink_rtt::Output::new();
-    let mut peripherals = pac::Peripherals::take().unwrap();
-    let core = pac::CorePeripherals::take().unwrap();
-    let mut watchdog = Watchdog::new(peripherals.WATCHDOG);
-    let clocks = hal::clocks::init_clocks_and_plls(
-        tiny_2040::XOSC_CRYSTAL_FREQ,
-        peripherals.XOSC,
-        peripherals.CLOCKS,
-        peripherals.PLL_SYS,
-        peripherals.PLL_USB,
-        &mut peripherals.RESETS,
-        &mut watchdog,
-    )
-    .ok()
-    .unwrap();
+    let mut peripherals = util::ControllerPeripherals::take().unwrap();
 
-    let _ = writeln!(output, "Hello world!");
+    // setup the fan controller to run on a timer
+    let mut control_loop_alarm = peripherals.timer.alarm_0().unwrap();
+    let mut status_timer = peripherals.timer.alarm_2().unwrap();
 
-    let sio = Sio::new(peripherals.SIO);
-    let board = tiny_2040::Tiny2040::new(
-        peripherals.IO_BANK0,
-        peripherals.PADS_BANK0,
-        sio.gpio_bank0,
-        &mut peripherals.RESETS,
-    );
+    unsafe {
+        PERIPHERALS = Some(peripherals);
+    }
 
-    let mut red = board.pins.led_r.into_push_pull_output();
-    let mut green = board.pins.led_g.into_push_pull_output();
-    let mut blue = board.pins.led_b.into_push_pull_output();
+    control_loop_alarm.schedule(HEARTBEAT_PERIOD).unwrap();
+    control_loop_alarm.enable_interrupt();
 
-    red.set_high().unwrap();
-    green.set_high().unwrap();
-    blue.set_high().unwrap();
+    unsafe {
+        ALARM0 = Some(control_loop_alarm);
+    }
 
-    // systick based delay
-    let mut delay =
-        cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.get_freq().integer());
+    status_timer.schedule(STATUS_PERIOD).unwrap();
+    status_timer.enable_interrupt();
+    unsafe {
+        ALARM2 = Some(status_timer);
+    }
 
-    // Configure PWMs
-    let mut slices = Slices::new(peripherals.PWM, &mut peripherals.RESETS);
-    slices.pwm0.set_top(u16::MAX / 16);
-    let mut pwm = slices.pwm0;
-    pwm.enable();
-    pwm.set_ph_correct();
+    unsafe {
+        hal::pac::NVIC::unmask(hal::pac::interrupt::TIMER_IRQ_0);
+        hal::pac::NVIC::unmask(hal::pac::interrupt::TIMER_IRQ_2);
+    }
 
-    let fan = &mut pwm.channel_a;
-
-    let _fanpin = fan.output_to(board.pins.gpio0);
-    fan.enable();
-
-    let mut converter = Adc::new(peripherals.ADC, &mut peripherals.RESETS);
-
-    // Initialize fan control block
-    let mut controller = FanController::new(
-        board.pins.adc0.into_floating_input(),
-        fan,
-        u16::MAX / 16,
-        u16::MAX / (16 * 8), // 12.5% or so of full scale, should spin everything up
-        Degrees(55.),
-        Degrees(35.),
-    );
+    // It should be safe enough to hold a ref to the watchdog to avoid going into a critical section every wake
+    let watchdog = cortex_m::interrupt::free(|_cs| unsafe {
+        let peripherals = PERIPHERALS.as_mut().unwrap_unchecked();
+        &mut peripherals.watchdog
+    });
 
     loop {
-        // Read ADC, filter, convert to temperature and apply fan curve
-        controller.fan_curve(&mut converter);
+        watchdog.feed();
 
-        let temp = controller.last_temp;
-        //TODO: On-the-fly updating of fan curves over USB and/or a way to report temperatures measured
-
-        writeln!(output, "T: {}°C, D: {}", temp, controller.current_duty).unwrap();
-
-        delay.delay_ms(100);
+        // event loop
+        cortex_m::asm::wfi();
     }
+}
+
+// Alarm 0 timer, used for fan control stuff
+#[allow(non_snake_case)]
+#[interrupt]
+unsafe fn TIMER_IRQ_0() {
+    static mut TEMP: fan_controller::temperature::Dsp<u16> =
+        fan_controller::temperature::Dsp::new();
+
+    static mut controller: FanCurve<u16> = FanCurve::new(
+        PWM_TICKS as u16,
+        ((PWM_TICKS * 3) / 10) as u16,
+        Degrees::from_int(50),
+        Degrees::from_int(35),
+    );
+
+    ALARM0.as_mut().unwrap_unchecked().clear_interrupt();
+    ALARM0
+        .as_mut()
+        .unwrap_unchecked()
+        .schedule(HEARTBEAT_PERIOD)
+        .unwrap();
+
+    // mutably borrow... safe because no one else can borrow this during our execution
+    let peripherals = PERIPHERALS.as_mut().unwrap_unchecked();
+
+    // heartbeat at half our operating frequency
+    if peripherals.red.is_high().unwrap() {
+        peripherals.red.set_low().unwrap();
+    } else {
+        peripherals.red.set_high().unwrap();
+    }
+
+    // Read ADC, filter, convert to temperature and apply fan curve
+    CURRENT_TEMP = TEMP.read_temp(&mut peripherals.adc, &mut peripherals.thermistor);
+    CURRENT_DUTY = controller.fan_curve(CURRENT_TEMP);
+
+    // Apply output
+    peripherals.fan.set_duty(CURRENT_DUTY);
+}
+
+// Alarm 1 timer, used only for scheduling events for the USB IRQ right now
+#[allow(non_snake_case)]
+#[interrupt]
+unsafe fn TIMER_IRQ_2() {
+    let status_timer = ALARM2.as_mut().unwrap_unchecked();
+
+    status_timer.clear_interrupt();
+    status_timer.schedule(STATUS_PERIOD).unwrap();
+    crate::util::USB_SEND_STATUS_PENDING.store(true, core::sync::atomic::Ordering::Relaxed);
+    hal::pac::NVIC::pend(hal::pac::interrupt::USBCTRL_IRQ);
 }

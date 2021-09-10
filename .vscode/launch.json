@@ -28,7 +28,7 @@
             "request": "launch",
             "type": "cortex-debug",
             "servertype": "jlink",
-            "serverpath": "C:\\Program Files\\SEGGER\\JLink\\JLinkGDBServer.exe",
+            "serverpath": "C:\\Program Files\\SEGGER\\JLink\\JLinkGDBServerCL.exe",
             "interface": "swd",
             "device": "RP2040_M0_0",
             "runToMain": true,
@@ -50,5 +50,6 @@
                     }
                 ]
             }
-        ]
-    }
+        }
+    ]
+}

@@ -13,6 +13,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
+#[allow(clippy::unwrap_used)]
 fn main() {
     // Put `memory.x` in our output directory and ensure it's
     // on the linker search path.
