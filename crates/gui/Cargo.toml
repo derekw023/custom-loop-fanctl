@@ -1,0 +1,15 @@
+[package]
+name = "dexcon-configurator"
+version = "0.1.0"
+edition = "2021"
+description = "A wasm gui to interact with an associated fan controller via webusb"
+workspace = "../.."
+keywords = ["yew", "trunk"]
+categories = ["gui", "wasm", "web-programming"]
+readme = "README.md"
+license = "GPL-3.0-or-later"
+repository = "http://github.com/dexorg25/custom-loop-fanctl/"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+yew = { version = "0.20", features = ["csr"] }

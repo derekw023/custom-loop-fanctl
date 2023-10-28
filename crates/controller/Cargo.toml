@@ -1,0 +1,34 @@
+[package]
+name = "custom-loop-fanctl"
+version = "0.1.0"
+authors = ["Dex Witt <dex@witt.me>"]
+edition = "2021"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+repository = "http://github.com/dexorg25/custom-loop-fanctl/"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[profile.release]
+panic = 'abort'
+
+[profile.dev]
+panic = 'abort'
+
+[dependencies]
+cortex-m = "0.7.7"
+cortex-m-rt = { version = "0.7.3", features = ["set-vtor", "set-sp", "device"] }
+# defmt-serial = "0.6.0"
+embedded-hal = "0.2.7"
+fugit = { version = "0.3.7" }
+panic-halt = "0.2.0"
+rp2040-hal = { version = "0.9.0" }
+usb-device = { version = "0.2.9" }
+usbd-serial = "0.1.1"
+heapless = "0.7.16"
+
+[dependencies.pimoroni-tiny2040]
+version = "0.6.0"
+features = ["rt", "rp2040-e5"]
+
+[dev-dependencies]
