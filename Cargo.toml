@@ -1,4 +1,4 @@
 [workspace]
-members = ["crates/gui"]
+members = ["crates/*"]
 exclude = ["crates/controller"]
 resolver = "2"

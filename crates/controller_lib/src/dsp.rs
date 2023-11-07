@@ -1,10 +1,7 @@
 use core::default::Default;
 
 /// Implements a 32 point moving average filter to reject some high frequency noise
-pub struct MovingAverage<T>
-where
-    T: Copy + Clone + Into<u32> + From<u32> + Default,
-{
+pub struct MovingAverage<T> {
     buffer: [T; 32],
     index: usize,
     accumulator: u32,
@@ -12,9 +9,10 @@ where
 
 impl<T> MovingAverage<T>
 where
-    T: Copy + Clone + Into<u32> + From<u32> + Default,
+    T: Copy + Into<u32> + From<u32> + Default,
 {
     /// Create a moving average based filter to reject some high frequency noise
+    #[must_use]
     pub fn new() -> Self {
         Self {
             buffer: [Default::default(); 32],
@@ -35,5 +33,14 @@ where
 
         // Return new value
         (self.accumulator / (self.buffer.len() as u32)).into()
+    }
+}
+
+impl<T> Default for MovingAverage<T>
+where
+    T: Copy + Into<u32> + From<u32> + Default,
+{
+    fn default() -> Self {
+        Self::new()
     }
 }

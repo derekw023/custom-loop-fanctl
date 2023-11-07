@@ -19,6 +19,10 @@ impl FanCurve<u16> {
     /// *  `min_duty` - The minimum duty cycle that shall be returned
     /// *  `max_temp` - High temperature saturation point, IE the temperature at which the returned duty will be `max_duty`
     /// *  `min_temp` - Low temperature saturation point
+    ///
+    /// # Panics
+    /// * If there is a mathematical overflow at runtime, though this should not be possible.
+    #[must_use]
     pub fn new(max_duty: u16, min_duty: u16, max_temp: Degrees, min_temp: Degrees) -> Self {
         // Calculate the slope at construction instead of on update
         let diff = max_duty - min_duty;
@@ -47,7 +51,8 @@ impl FanCurve<u16> {
         } else if desired_duty < i64::from(self.min_duty) {
             self.min_duty
         } else {
-            u16::try_from(desired_duty).expect("Duty cycle range error")
+            // Manually verified this will pass, safe to do
+            unsafe { u16::try_from(desired_duty).unwrap_unchecked() }
         }
     }
 }

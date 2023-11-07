@@ -16,11 +16,9 @@ use once_cell::unsync::Lazy;
 use panic_halt as _;
 use util::ControllerPeripherals;
 
-mod error;
-mod fan_controller;
 mod util;
 
-use fan_controller::{dsp, Degrees, FanCurve};
+use controller_lib::{dsp, Degrees, FanCurve};
 
 const HEARTBEAT_PERIOD: fugit::MicrosDurationU32 = fugit::MicrosDurationU32::Hz(100);
 const STATUS_PERIOD: fugit::MicrosDurationU32 = fugit::MicrosDurationU32::Hz(1);

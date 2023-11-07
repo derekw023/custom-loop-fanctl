@@ -7,6 +7,7 @@ use core::fmt::Display;
 pub struct Degrees(pub i32);
 
 impl Degrees {
+    #[must_use]
     pub const fn from_int(val: i32) -> Self {
         Self(val << 12)
     }
@@ -15,6 +16,8 @@ impl Degrees {
 // Conversion of ADC readings to degrees is specific to ADC config and circuit implementation, provide here a conversion that specifies our circuit
 impl From<u16> for Degrees {
     /// Create a new `Degrees` from a 12-bit ADC read of a thermistor in a 10k voltage divider
+    /// # Panics
+    /// * Integer overflow in fixed point conversion
     #[allow(clippy::cast_lossless, clippy::cast_precision_loss)]
     fn from(val: u16) -> Self {
         // R1 integer format
