@@ -26,6 +26,7 @@ rp2040-hal = { version = "0.9.0" }
 usb-device = { version = "0.2.9" }
 usbd-serial = "0.1.1"
 heapless = "0.7.16"
+once_cell = { version = "1.18.0", default-features = false }
 
 [dependencies.pimoroni-tiny2040]
 version = "0.6.0"

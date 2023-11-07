@@ -1,17 +1,23 @@
-use core::convert::TryInto;
+use core::default::Default;
 
 /// Implements a 32 point moving average filter to reject some high frequency noise
-pub struct MovingAverage<T> {
+pub struct MovingAverage<T>
+where
+    T: Copy + Clone + Into<u32> + From<u32> + Default,
+{
     buffer: [T; 32],
     index: usize,
     accumulator: u32,
 }
 
-impl MovingAverage<u16> {
+impl<T> MovingAverage<T>
+where
+    T: Copy + Clone + Into<u32> + From<u32> + Default,
+{
     /// Create a moving average based filter to reject some high frequency noise
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            buffer: [0; 32],
+            buffer: [Default::default(); 32],
             index: 0,
             accumulator: 0,
         }
@@ -20,16 +26,14 @@ impl MovingAverage<u16> {
     /// Circular buffer with accumulator for moving average calculation
     // the cast is OK, because this is a 32 bit platform
     #[allow(clippy::cast_possible_truncation)]
-    pub fn update(&mut self, val: u16) -> u16 {
-        self.accumulator -= u32::from(self.buffer[self.index]);
+    pub fn update(&mut self, val: T) -> T {
+        self.accumulator -= self.buffer[self.index].into();
         self.buffer[self.index] = val;
-        self.accumulator += u32::from(self.buffer[self.index]);
+        self.accumulator += self.buffer[self.index].into();
         self.index += 1;
         self.index %= self.buffer.len();
 
         // Return new value
-        (self.accumulator / (self.buffer.len() as u32))
-            .try_into()
-            .unwrap_or(0)
+        (self.accumulator / (self.buffer.len() as u32)).into()
     }
 }

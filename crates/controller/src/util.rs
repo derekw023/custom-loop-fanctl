@@ -12,7 +12,7 @@ use hal::{
         FunctionNull, FunctionSio, Pin, PullDown, SioOutput,
     },
     pac::interrupt,
-    pwm::{Channel, FreeRunning, Pwm1, Slice, A},
+    pwm::{Channel, FreeRunning, Pwm2, Slice, A},
     usb::UsbBus,
     Adc, Clock, Timer, Watchdog,
 };
@@ -34,7 +34,7 @@ pub static USB_SEND_STATUS_PENDING: AtomicBool = AtomicBool::new(false);
 const REF_CLK_HZ: u32 = 125_000_000;
 const PWM_TARGET_HZ: u32 = 25_000;
 const PWM_DIV: u32 = 1;
-pub const PWM_TICKS: u32 = (REF_CLK_HZ / PWM_TARGET_HZ) / (PWM_DIV * 2);
+pub const PWM_TICKS: u32 = (REF_CLK_HZ / PWM_TARGET_HZ) / (PWM_DIV);
 
 pub struct ControllerPeripherals {
     pub watchdog: Watchdog,
@@ -45,7 +45,7 @@ pub struct ControllerPeripherals {
     pub red: Pin<Gpio18, FunctionSio<SioOutput>, PullDown>,
     pub green: Pin<Gpio19, FunctionSio<SioOutput>, PullDown>,
     pub blue: Pin<Gpio20, FunctionSio<SioOutput>, PullDown>,
-    pub fan: Channel<Slice<Pwm1, FreeRunning>, A>,
+    pub fan: Channel<Slice<Pwm2, FreeRunning>, A>,
 }
 
 #[allow(clippy::cast_possible_truncation)]
@@ -101,15 +101,15 @@ impl ControllerPeripherals {
         // Configure PWMs
         let pwm_slices = hal::pwm::Slices::new(peripherals.PWM, &mut peripherals.RESETS);
 
-        let mut pwm = pwm_slices.pwm1;
+        let mut pwm = pwm_slices.pwm2;
 
         pwm.enable();
         pwm.set_top((PWM_TICKS / PWM_DIV) as u16);
-        pwm.set_ph_correct();
+        // pwm.set_ph_correct();
 
         let mut fan = pwm.channel_a;
-        fan.set_inverted();
-        let mut fan_io = board.gpio2;
+        // fan.set_inverted();
+        let mut fan_io = board.gpio4;
 
         fan_io.set_drive_strength(hal::gpio::OutputDriveStrength::TwelveMilliAmps);
         fan_io.set_slew_rate(hal::gpio::OutputSlewRate::Fast);
@@ -220,9 +220,12 @@ unsafe fn USBCTRL_IRQ() {
         USB_SEND_STATUS_PENDING.store(false, Ordering::SeqCst);
 
         // if command was received, overwrite buffer contents with a response instead
+        let duty_percentish = (u32::from(CURRENT_DUTY) * 10000) / PWM_TICKS;
+        let duty_pct = duty_percentish / 100;
+        let duty_decimals = duty_percentish % 100;
         writeln!(
             report_buf,
-            "T: {CURRENT_TEMP}°C, D: {CURRENT_DUTY}/{PWM_TICKS}",
+            "T: {CURRENT_TEMP:02}°C, D: {duty_pct:3}.{duty_decimals:02}%"
         )
         .unwrap();
 

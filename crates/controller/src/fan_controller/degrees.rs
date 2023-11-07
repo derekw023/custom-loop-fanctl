@@ -1,12 +1,8 @@
-use super::dsp::MovingAverage;
 use core::fmt::Display;
-// use defmt::Format;
-use embedded_hal::adc::Channel;
-use embedded_hal::adc::OneShot;
 
 /// Type for holding temperature readings with context, in a fixed point manner
-#[derive(PartialEq, PartialOrd, Copy, Clone)]
-// Imma say -128-128C
+#[derive(PartialEq, PartialOrd, Copy, Clone, Default)]
+// Valid representation range: -128-128C
 // so 8 integer bits. 23 fractional bits
 pub struct Degrees(pub i32);
 
@@ -53,8 +49,33 @@ impl From<u16> for Degrees {
         let slope_fixed: i64 = (-4 << 12) - 1116;
         let int_fixed: i64 = (65 << 12) + 3084;
 
-        // 12 in is 12 out when the coefficients are scaled appropriately
-        Degrees((((slope_fixed * r_fixed) / 1000) >> 12) as i32 + int_fixed as i32)
+        // F12 in is F12 out when the coefficients are scaled appropriately
+        Degrees(
+            i32::try_from((((slope_fixed * r_fixed) / 1000) >> 12) + int_fixed)
+                .expect("Line mapping error"),
+        )
+    }
+}
+
+#[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
+impl From<Degrees> for u32 {
+    fn from(val: Degrees) -> u32 {
+        if val.0 < 0 {
+            0
+        } else {
+            val.0 as u32
+        }
+    }
+}
+
+#[allow(clippy::cast_possible_wrap)]
+impl From<u32> for Degrees {
+    fn from(value: u32) -> Self {
+        if value > i32::MAX as u32 {
+            Self(i32::MAX)
+        } else {
+            Self(value as i32)
+        }
     }
 }
 
@@ -69,26 +90,3 @@ impl Display for Degrees {
 //         defmt::write!(fmt, "{}", self.0);
 //     }
 // }
-
-pub struct Dsp<Word> {
-    filter: MovingAverage<Word>,
-}
-
-impl Dsp<u16> {
-    pub const fn new() -> Self {
-        Dsp {
-            filter: MovingAverage::new(),
-        }
-    }
-
-    pub fn read_temp<ADC, T, I>(&mut self, converter: &mut ADC, sensor_pin: &mut T) -> Degrees
-    where
-        ADC: OneShot<ADC, u16, T>,
-        T: Channel<ADC, ID = I>,
-    {
-        match converter.read(sensor_pin) {
-            Ok(t) => self.filter.update(t).into(),
-            Err(_) => 0u16.into(),
-        }
-    }
-}

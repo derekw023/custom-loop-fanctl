@@ -1,3 +1,6 @@
 pub mod controller;
 pub mod dsp;
-pub mod temperature;
+mod degrees;
+
+pub use controller::FanCurve;
+pub use degrees::Degrees;

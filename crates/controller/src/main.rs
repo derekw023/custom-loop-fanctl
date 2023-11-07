@@ -10,24 +10,23 @@ use bsp::entry;
 use bsp::hal;
 use hal::pac::interrupt;
 
-use embedded_hal::{digital::v2::InputPin, prelude::*};
-use util::ControllerPeripherals;
-mod fan_controller;
 use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::{digital::v2::InputPin, prelude::*};
+use once_cell::unsync::Lazy;
 use panic_halt as _;
-
-use crate::{
-    fan_controller::{controller::FanCurve, temperature::Degrees},
-    util::PWM_TICKS,
-};
+use util::ControllerPeripherals;
 
 mod error;
+mod fan_controller;
 mod util;
+
+use fan_controller::{dsp, Degrees, FanCurve};
 
 const HEARTBEAT_PERIOD: fugit::MicrosDurationU32 = fugit::MicrosDurationU32::Hz(100);
 const STATUS_PERIOD: fugit::MicrosDurationU32 = fugit::MicrosDurationU32::Hz(1);
 
 static mut CURRENT_TEMP: Degrees = Degrees::from_int(65);
+static mut TEMP: Lazy<dsp::MovingAverage<Degrees>> = Lazy::new(dsp::MovingAverage::new);
 static mut CURRENT_DUTY: u16 = 0;
 
 static mut PERIPHERALS: Option<ControllerPeripherals> = None;
@@ -82,15 +81,14 @@ fn main() -> ! {
 #[allow(non_snake_case)]
 #[interrupt]
 unsafe fn TIMER_IRQ_0() {
-    static mut TEMP: fan_controller::temperature::Dsp<u16> =
-        fan_controller::temperature::Dsp::new();
-
-    static mut controller: FanCurve<u16> = FanCurve::new(
-        PWM_TICKS as u16,
-        ((PWM_TICKS * 3) / 10) as u16,
-        Degrees::from_int(50),
-        Degrees::from_int(35),
-    );
+    static mut CONTROLLER: Lazy<FanCurve<u16>> = Lazy::new(|| {
+        FanCurve::new(
+            u16::try_from(util::PWM_TICKS).unwrap(),
+            u16::try_from((util::PWM_TICKS * 2) / 10).unwrap(),
+            Degrees::from_int(48),
+            Degrees::from_int(35),
+        )
+    });
 
     ALARM0.as_mut().unwrap_unchecked().clear_interrupt();
     ALARM0
@@ -110,8 +108,9 @@ unsafe fn TIMER_IRQ_0() {
     }
 
     // Read ADC, filter, convert to temperature and apply fan curve
-    CURRENT_TEMP = TEMP.read_temp(&mut peripherals.adc, &mut peripherals.thermistor);
-    CURRENT_DUTY = controller.fan_curve(CURRENT_TEMP);
+    let conversion = peripherals.adc.read(&mut peripherals.thermistor).unwrap();
+    CURRENT_TEMP = TEMP.update(conversion);
+    CURRENT_DUTY = CONTROLLER.fan_curve(CURRENT_TEMP);
 
     // Apply output
     peripherals.fan.set_duty(CURRENT_DUTY);
