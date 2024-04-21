@@ -1,6 +1,9 @@
-use crate::{bsp, hal, CURRENT_DUTY, CURRENT_TEMP};
+use crate::{timers::CURRENT_DUTY, timers::CURRENT_TEMP};
 
 use cortex_m::delay::Delay;
+
+use bsp::hal;
+use pimoroni_tiny2040 as bsp;
 
 use core::sync::atomic::{AtomicBool, Ordering};
 use embedded_hal::{digital::v2::OutputPin, watchdog::WatchdogEnable, PwmPin};

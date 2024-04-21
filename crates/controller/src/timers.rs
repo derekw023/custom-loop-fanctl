@@ -1,6 +1,9 @@
+/// Generally, timers and timed events in the system
+/// Right now just a timer each for poking USB (may eventually move this) and a timer for driving the fan curve
+/// If the USB stuff is exfiltrated into ta USB crate (it should be) then this will just become the fan controller mod
 use crate::{
-    util::{self, ControllerPeripherals},
-    ALARM0, ALARM2, CURRENT_DUTY, CURRENT_TEMP, HEARTBEAT_PERIOD, PERIPHERALS, STATUS_PERIOD, TEMP,
+    util::{self},
+    HEARTBEAT_PERIOD, PERIPHERALS, STATUS_PERIOD,
 };
 use controller_lib::{Degrees, FanCurve};
 
@@ -8,20 +11,27 @@ use pimoroni_tiny2040 as bsp;
 
 use bsp::hal;
 use hal::pac::interrupt;
-use hal::timer::Alarm;
+use hal::timer::{Alarm, Alarm0, Alarm2};
 
 use embedded_hal::digital::v2::OutputPin;
 use embedded_hal::{digital::v2::InputPin, prelude::*};
 use once_cell::unsync::Lazy;
 
-pub(crate) fn setup(mut peripherals: ControllerPeripherals) {
+pub(crate) static mut CURRENT_TEMP: Degrees = Degrees::from_int(65);
+static mut TEMP: Lazy<crate::dsp::MovingAverage<Degrees>> =
+    Lazy::new(crate::dsp::MovingAverage::new);
+pub(crate) static mut CURRENT_DUTY: u16 = 0;
+
+static mut ALARM0: Option<Alarm0> = None;
+static mut ALARM2: Option<Alarm2> = None;
+
+pub(crate) fn setup() {
+    // Safe enough, given interrupts aren't enabled until later
+    let peripherals = unsafe { PERIPHERALS.as_mut().unwrap_unchecked() };
+
     // setup the fan controller to run on a timer
     let mut control_loop_alarm = peripherals.timer.alarm_0().unwrap();
     let mut status_timer = peripherals.timer.alarm_2().unwrap();
-
-    unsafe {
-        PERIPHERALS = Some(peripherals);
-    }
 
     control_loop_alarm.schedule(HEARTBEAT_PERIOD).unwrap();
     control_loop_alarm.enable_interrupt();
