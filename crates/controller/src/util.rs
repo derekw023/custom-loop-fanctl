@@ -1,14 +1,11 @@
 //! Ostensibly, BSP initialization code
 //!
 //! Realistically... too much. controller init code here should be in the controller, usb should be in usb, what's left (if anything) should remain here
-// use crate::{timers::CURRENT_DUTY, timers::CURRENT_TEMP};
-
 use cortex_m::delay::Delay;
 
 use bsp::hal;
 use pimoroni_tiny2040 as bsp;
 
-// use embedded_hal::{digital::v2::OutputPin, watchdog::WatchdogEnable, PwmPin};
 use embedded_hal::digital::OutputPin;
 use fugit::ExtU32;
 use hal::{
@@ -140,7 +137,6 @@ impl ControllerPeripherals {
 
     /// Initializer function, called from `take()` once
     fn init(&mut self) {
-        // self.red.as_ref_mut().unwrap().set_high().unwrap();
         self.green.set_high().unwrap();
         self.blue.set_high().unwrap();
 

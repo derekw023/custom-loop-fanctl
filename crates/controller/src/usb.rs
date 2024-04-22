@@ -11,16 +11,17 @@ use hal::timer::{Alarm, Alarm2};
 use hal::usb::UsbBus;
 use pimoroni_tiny2040 as bsp;
 
-static mut ALARM2: Option<Alarm2> = None;
-
 // USB Device support
 use usb_device::{class_prelude::*, prelude::*};
 use usbd_serial::SerialPort;
 
-// USB Singletons
-pub(crate) static mut USB_DEVICE: Option<UsbDevice<UsbBus>> = None;
 static mut USB_BUS: Option<UsbBusAllocator<UsbBus>> = None;
-pub(crate) static mut USB_SERIAL: Option<SerialPort<UsbBus>> = None;
+
+static mut ALARM2: Option<Alarm2> = None;
+
+// USB Singletons
+static mut USB_DEVICE: Option<UsbDevice<UsbBus>> = None;
+static mut USB_SERIAL: Option<SerialPort<UsbBus>> = None;
 
 pub static USB_SEND_STATUS_PENDING: AtomicBool = AtomicBool::new(false);
 
@@ -43,12 +44,6 @@ pub(crate) fn setup(controller: &mut ControllerPeripherals) {
     let serial = SerialPort::new(bus_ref);
     let usb_dev = UsbDeviceBuilder::new(bus_ref, UsbVidPid(0x16c0, 0x27dd)).build();
 
-    unsafe {
-        USB_SERIAL.replace(serial);
-        USB_DEVICE.replace(usb_dev);
-        hal::pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
-    }
-
     // Timer init, to schedule polls
     let mut status_timer = controller.timer.alarm_2().unwrap();
     status_timer.schedule(STATUS_PERIOD).unwrap();
@@ -56,10 +51,13 @@ pub(crate) fn setup(controller: &mut ControllerPeripherals) {
 
     unsafe {
         ALARM2 = Some(status_timer);
+        USB_SERIAL.replace(serial);
+        USB_DEVICE.replace(usb_dev);
     }
 
     unsafe {
         hal::pac::NVIC::unmask(hal::pac::interrupt::TIMER_IRQ_2);
+        hal::pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
     }
 }
 

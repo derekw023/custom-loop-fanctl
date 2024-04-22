@@ -15,7 +15,6 @@ mod usb;
 mod util;
 
 use controller_lib::dsp;
-// pub(crate) static mut PERIPHERALS: Option<util::ControllerPeripherals> = None;
 pub(crate) const HEARTBEAT_PERIOD: fugit::MicrosDurationU32 = fugit::MicrosDurationU32::Hz(100);
 pub(crate) const STATUS_PERIOD: fugit::MicrosDurationU32 = fugit::MicrosDurationU32::Hz(1);
 
