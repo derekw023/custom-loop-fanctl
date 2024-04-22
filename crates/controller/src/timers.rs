@@ -1,47 +1,55 @@
-/// Generally, timers and timed events in the system
-/// Right now just a timer each for poking USB (may eventually move this) and a timer for driving the fan curve
-/// If the USB stuff is exfiltrated into ta USB crate (it should be) then this will just become the fan controller mod
+//! Generally, timers and timed events in the system
+//! Right now just a timer each for poking USB (may eventually move this) and a timer for driving the fan curve
+//! If the USB stuff is exfiltrated into ta USB crate (it should be) then this will just become the fan controller mod
 use crate::{
-    util::{self},
-    HEARTBEAT_PERIOD, PERIPHERALS, STATUS_PERIOD,
+    dsp::MovingAverage,
+    util::{self, ControllerPeripherals, ControllerStatusPin, FanPin, ThermistorPin},
+    HEARTBEAT_PERIOD, STATUS_PERIOD,
 };
 use controller_lib::{Degrees, FanCurve};
 
 use pimoroni_tiny2040 as bsp;
 
 use bsp::hal;
-use hal::pac::interrupt;
-use hal::timer::{Alarm, Alarm0, Alarm2};
+use hal::{
+    adc::AdcPin,
+    timer::{Alarm, Alarm0, Alarm2},
+};
+use hal::{pac::interrupt, Adc};
 
-use embedded_hal::digital::v2::OutputPin;
-use embedded_hal::{digital::v2::InputPin, prelude::*};
-use once_cell::unsync::Lazy;
+use embedded_hal::{
+    digital::{OutputPin, StatefulOutputPin},
+    pwm::SetDutyCycle,
+};
 
-pub(crate) static mut CURRENT_TEMP: Degrees = Degrees::from_int(65);
-static mut TEMP: Lazy<crate::dsp::MovingAverage<Degrees>> =
-    Lazy::new(crate::dsp::MovingAverage::new);
-pub(crate) static mut CURRENT_DUTY: u16 = 0;
-
-static mut ALARM0: Option<Alarm0> = None;
+static mut ACTIVE_LOOP: Option<ControlLoop> = None;
 static mut ALARM2: Option<Alarm2> = None;
 
-pub(crate) fn setup() {
-    // Safe enough, given interrupts aren't enabled until later
-    let peripherals = unsafe { PERIPHERALS.as_mut().unwrap_unchecked() };
+struct ControlLoop {
+    // Data for fan controller
+    curve: FanCurve<u16>,
+    current_duty: u16,
+    temperature: MovingAverage<Degrees>,
 
+    // HW resources
+    status_led: ControllerStatusPin,
+    thermistor_pin: AdcPin<ThermistorPin>,
+    adc: Adc,
+    loop_timer: Alarm0,
+    fan: FanPin,
+}
+
+pub(crate) fn setup(controller: &mut ControllerPeripherals) {
     // setup the fan controller to run on a timer
-    let mut control_loop_alarm = peripherals.timer.alarm_0().unwrap();
-    let mut status_timer = peripherals.timer.alarm_2().unwrap();
-
+    let mut control_loop_alarm = controller.timer.alarm_0().unwrap();
     control_loop_alarm.schedule(HEARTBEAT_PERIOD).unwrap();
     control_loop_alarm.enable_interrupt();
 
-    unsafe {
-        ALARM0 = Some(control_loop_alarm);
-    }
-
+    // USB timer (TODO move out)
+    let mut status_timer = controller.timer.alarm_2().unwrap();
     status_timer.schedule(STATUS_PERIOD).unwrap();
     status_timer.enable_interrupt();
+
     unsafe {
         ALARM2 = Some(status_timer);
     }
@@ -50,46 +58,67 @@ pub(crate) fn setup() {
         hal::pac::NVIC::unmask(hal::pac::interrupt::TIMER_IRQ_0);
         hal::pac::NVIC::unmask(hal::pac::interrupt::TIMER_IRQ_2);
     }
+
+    let adc = controller.take_adc().unwrap();
+
+    let thermistor = AdcPin::new(controller.thermistor_pin.take().unwrap()).unwrap();
+
+    let controller = ControlLoop {
+        adc,
+        loop_timer: control_loop_alarm,
+        current_duty: 0,
+        fan: controller.fan.take().unwrap(),
+        temperature: MovingAverage::new(),
+        curve: FanCurve::new(
+            u16::try_from(util::PWM_TICKS).unwrap(),
+            u16::try_from((util::PWM_TICKS * 2) / 10).unwrap(),
+            Degrees::from_int(48),
+            Degrees::from_int(35),
+        ),
+        status_led: controller.red.take().unwrap(),
+        thermistor_pin: thermistor,
+    };
+
+    unsafe {
+        ACTIVE_LOOP.replace(controller);
+    }
+}
+
+impl ControlLoop {
+    /// Loop update function, called from interrupt context
+    fn update(&mut self) {
+        self.loop_timer.clear_interrupt();
+        self.loop_timer.schedule(HEARTBEAT_PERIOD).unwrap();
+
+        // // heartbeat at half our operating frequency
+        if self.status_led.is_set_high().unwrap() {
+            self.status_led.set_low().unwrap();
+        } else {
+            self.status_led.set_high().unwrap();
+        }
+
+        // Read ADC, filter, convert to temperature and apply fan curve
+        // TODO: this won't work
+        // let conversion = self.adc.read_single();
+        let conversion: u16 = unimplemented!("conversion");
+
+        // CURRENT_TEMP = TEMP.update(conversion);
+        let current_temp = self.temperature.update(conversion.into());
+        self.current_duty = self.curve.fan_curve(current_temp);
+
+        // Apply output
+        self.fan.set_duty_cycle(self.current_duty).unwrap();
+    }
 }
 
 // Alarm 0 timer, used for fan control stuff
 #[allow(non_snake_case)]
 #[interrupt]
 unsafe fn TIMER_IRQ_0() {
-    static mut CONTROLLER: Lazy<FanCurve<u16>> = Lazy::new(|| {
-        FanCurve::new(
-            u16::try_from(util::PWM_TICKS).unwrap(),
-            u16::try_from((util::PWM_TICKS * 2) / 10).unwrap(),
-            Degrees::from_int(48),
-            Degrees::from_int(35),
-        )
-    });
-
-    ALARM0.as_mut().unwrap_unchecked().clear_interrupt();
-    ALARM0
-        .as_mut()
-        .unwrap_unchecked()
-        .schedule(HEARTBEAT_PERIOD)
-        .unwrap();
-
-    // mutably borrow... safe because no one else can borrow this during our execution
-    // TODO figure out a better way to do this
-    let peripherals = PERIPHERALS.as_mut().unwrap_unchecked();
-
-    // // heartbeat at half our operating frequency
-    if peripherals.red.is_high().unwrap() {
-        peripherals.red.set_low().unwrap();
-    } else {
-        peripherals.red.set_high().unwrap();
+    if let Some(current_loop) = ACTIVE_LOOP.as_mut() {
+        // Do the processing in a safe function
+        current_loop.update();
     }
-
-    // Read ADC, filter, convert to temperature and apply fan curve
-    let conversion = peripherals.adc.read(&mut peripherals.thermistor).unwrap();
-    CURRENT_TEMP = TEMP.update(conversion);
-    CURRENT_DUTY = CONTROLLER.fan_curve(CURRENT_TEMP);
-
-    // Apply output
-    peripherals.fan.set_duty(CURRENT_DUTY);
 }
 
 // Alarm 1 timer, used only for scheduling events for the USB IRQ right now

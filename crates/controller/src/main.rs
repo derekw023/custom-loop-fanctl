@@ -14,31 +14,19 @@ mod timers;
 mod util;
 
 use controller_lib::dsp;
-pub(crate) static mut PERIPHERALS: Option<util::ControllerPeripherals> = None;
+// pub(crate) static mut PERIPHERALS: Option<util::ControllerPeripherals> = None;
 pub(crate) const HEARTBEAT_PERIOD: fugit::MicrosDurationU32 = fugit::MicrosDurationU32::Hz(100);
 pub(crate) const STATUS_PERIOD: fugit::MicrosDurationU32 = fugit::MicrosDurationU32::Hz(1);
 
 #[entry]
 fn main() -> ! {
-    let peripherals = util::ControllerPeripherals::take().unwrap();
+    let mut peripherals = util::ControllerPeripherals::take().unwrap();
 
-    // Access to peripherals happens thru this global static in critical sections
-    // or where some other mechanism ensures exclusive mutable access to specific resources
-    unsafe {
-        PERIPHERALS = Some(peripherals);
-    }
-
-    timers::setup();
-
-    // It should be safe enough to hold a ref to the watchdog to avoid going into a critical section every wake
-    let watchdog = cortex_m::interrupt::free(|_cs| unsafe {
-        let peripherals = PERIPHERALS.as_mut().unwrap_unchecked();
-        &mut peripherals.watchdog
-    });
-    // let watchdog = &mut peripherals.watchdog;
+    // Hand off peripherals to the subsystems that need them
+    timers::setup(&mut peripherals);
 
     loop {
-        watchdog.feed();
+        peripherals.watchdog.feed();
 
         // event loop
         cortex_m::asm::wfi();

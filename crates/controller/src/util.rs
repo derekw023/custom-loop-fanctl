@@ -1,4 +1,7 @@
-use crate::{timers::CURRENT_DUTY, timers::CURRENT_TEMP};
+//! Ostensibly, BSP initialization code
+//!
+//! Realistically... too much. controller init code here should be in the controller, usb should be in usb, what's left (if anything) should remain here
+// use crate::{timers::CURRENT_DUTY, timers::CURRENT_TEMP};
 
 use cortex_m::delay::Delay;
 
@@ -6,13 +9,13 @@ use bsp::hal;
 use pimoroni_tiny2040 as bsp;
 
 use core::sync::atomic::{AtomicBool, Ordering};
-use embedded_hal::{digital::v2::OutputPin, watchdog::WatchdogEnable, PwmPin};
+// use embedded_hal::{digital::v2::OutputPin, watchdog::WatchdogEnable, PwmPin};
+use embedded_hal::digital::OutputPin;
 use fugit::ExtU32;
 use hal::{
-    adc::AdcPin,
     gpio::{
         bank0::{Gpio18, Gpio19, Gpio20, Gpio26},
-        FunctionNull, FunctionSio, Pin, PullDown, SioOutput,
+        FunctionSio, Pin, PullDown, PullNone, SioInput, SioOutput,
     },
     pac::interrupt,
     pwm::{Channel, FreeRunning, Pwm2, Slice, A},
@@ -39,34 +42,43 @@ const PWM_TARGET_HZ: u32 = 25_000;
 const PWM_DIV: u32 = 1;
 pub const PWM_TICKS: u32 = (REF_CLK_HZ / PWM_TARGET_HZ) / (PWM_DIV);
 
+pub(crate) type ControllerStatusPin = Pin<Gpio18, FunctionSio<SioOutput>, PullDown>;
+pub(crate) type ThermistorPin = Pin<Gpio26, FunctionSio<SioInput>, PullNone>;
+pub(crate) type FanPin = Channel<Slice<Pwm2, FreeRunning>, A>;
+
+/// Global state struct, and central control point for peripheral/hardware access
 pub struct ControllerPeripherals {
+    resets: hal::pac::RESETS,
+    /// Feed this hungry boi every second or else
     pub watchdog: Watchdog,
     pub systick_delay: Delay,
+    /// Can be used to take ownership of timers and alarms
     pub timer: Timer,
-    pub adc: Adc,
-    pub thermistor: AdcPin<Pin<Gpio26, FunctionNull, PullDown>>,
-    pub red: Pin<Gpio18, FunctionSio<SioOutput>, PullDown>,
+    /// Hold the ADC, to allow it to be taken
+    pub adc: Option<hal::pac::ADC>,
+    pub thermistor_pin: Option<ThermistorPin>,
+    pub red: Option<ControllerStatusPin>,
     pub green: Pin<Gpio19, FunctionSio<SioOutput>, PullDown>,
     pub blue: Pin<Gpio20, FunctionSio<SioOutput>, PullDown>,
-    pub fan: Channel<Slice<Pwm2, FreeRunning>, A>,
+    pub fan: Option<FanPin>,
 }
 
 #[allow(clippy::cast_possible_truncation)]
 impl ControllerPeripherals {
+    /// Make the instance of this singleton, return None if somehow called twice
     pub fn take() -> Option<Self> {
-        // Wrap things in this singleton to promote refs to 'static, and add an extra assurance this only occurs once
-        let mut peripherals = hal::pac::Peripherals::take()?;
+        let mut pac_peripherals = hal::pac::Peripherals::take()?;
         let core = hal::pac::CorePeripherals::take()?;
 
-        let mut watchdog = hal::Watchdog::new(peripherals.WATCHDOG);
+        let mut watchdog = hal::Watchdog::new(pac_peripherals.WATCHDOG);
 
         let clocks = hal::clocks::init_clocks_and_plls(
             bsp::XOSC_CRYSTAL_FREQ,
-            peripherals.XOSC,
-            peripherals.CLOCKS,
-            peripherals.PLL_SYS,
-            peripherals.PLL_USB,
-            &mut peripherals.RESETS,
+            pac_peripherals.XOSC,
+            pac_peripherals.CLOCKS,
+            pac_peripherals.PLL_SYS,
+            pac_peripherals.PLL_USB,
+            &mut pac_peripherals.RESETS,
             &mut watchdog,
         )
         .ok()?;
@@ -78,31 +90,17 @@ impl ControllerPeripherals {
         let systick_delay =
             cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
-        let sio = hal::Sio::new(peripherals.SIO);
+        let sio = hal::Sio::new(pac_peripherals.SIO);
         // now that USB is done with it take ownership of these for the BSP
         let board: bsp::Pins = bsp::Pins::new(
-            peripherals.IO_BANK0,
-            peripherals.PADS_BANK0,
+            pac_peripherals.IO_BANK0,
+            pac_peripherals.PADS_BANK0,
             sio.gpio_bank0,
-            &mut peripherals.RESETS,
+            &mut pac_peripherals.RESETS,
         );
 
-        // Configure LEDs
-        let mut red = board
-            .led_red
-            .into_push_pull_output_in_state(hal::gpio::PinState::Low);
-        let mut green = board
-            .led_green
-            .into_push_pull_output_in_state(hal::gpio::PinState::Low);
-        let mut blue = board
-            .led_blue
-            .into_push_pull_output_in_state(hal::gpio::PinState::Low);
-
-        // Signal that HAL is passed init
-        red.set_high().unwrap();
-
         // Configure PWMs
-        let pwm_slices = hal::pwm::Slices::new(peripherals.PWM, &mut peripherals.RESETS);
+        let pwm_slices = hal::pwm::Slices::new(pac_peripherals.PWM, &mut pac_peripherals.RESETS);
 
         let mut pwm = pwm_slices.pwm2;
 
@@ -119,32 +117,19 @@ impl ControllerPeripherals {
 
         fan.output_to(fan_io);
 
-        fan.enable();
-
-        // Configure analog stuff
-        let adc = hal::Adc::new(peripherals.ADC, &mut peripherals.RESETS);
-        let thermistor = AdcPin::new(board.gpio26);
-
-        let timer = hal::Timer::new(peripherals.TIMER, &mut peripherals.RESETS, &clocks);
-
-        // Signal peripheral init passed, short of USB
-        green.set_high().unwrap();
+        let timer = hal::Timer::new(pac_peripherals.TIMER, &mut pac_peripherals.RESETS, &clocks);
 
         // Individually capture these for USB here
-        let ctrl_reg = peripherals.USBCTRL_REGS;
-        let ctrl_dpram = peripherals.USBCTRL_DPRAM;
+        let ctrl_reg = pac_peripherals.USBCTRL_REGS;
+        let ctrl_dpram = pac_peripherals.USBCTRL_DPRAM;
         let usb_clock = clocks.usb_clock;
 
         // Take ownership of RESETS from peripherals explicitly to hand it to the USB singleton
-        let mut usb_resets = peripherals.RESETS;
+        let usb_resets = &mut pac_peripherals.RESETS;
 
         // Initialize USB bus
         let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
-            ctrl_reg,
-            ctrl_dpram,
-            usb_clock,
-            true,
-            &mut usb_resets,
+            ctrl_reg, ctrl_dpram, usb_clock, true, usb_resets,
         ));
 
         let bus_ref = unsafe {
@@ -154,11 +139,10 @@ impl ControllerPeripherals {
 
         let serial = SerialPort::new(bus_ref);
         let usb_dev = UsbDeviceBuilder::new(bus_ref, UsbVidPid(0x16c0, 0x27dd))
-            .manufacturer("DEXCorp")
-            .product("DEXFANS")
-            .serial_number("TEST")
-            .device_class(2) //   from: https://www.usb.org/defined-class-codes
-            .max_packet_size_0(64)
+            // .manufacturer("DEXCorp")
+            // .product("DEXFANS")
+            // .serial_number("TEST")
+            // .device_class(2) //   from: https://www.usb.org/defined-class-codes\
             .build();
         unsafe {
             USB_SERIAL.replace(serial);
@@ -166,25 +150,54 @@ impl ControllerPeripherals {
             hal::pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
         }
 
-        // Everything else is finished
-        blue.set_high().unwrap();
-
-        // Globally enable interrupts at the end
-        unsafe {
-            cortex_m::interrupt::enable();
-        }
-
-        Some(Self {
+        let mut ret = Self {
             watchdog,
             systick_delay,
             timer,
-            adc,
-            thermistor,
-            red,
-            green,
-            blue,
-            fan,
-        })
+            adc: Some(pac_peripherals.ADC),
+            thermistor_pin: Some(board.gpio26.into_floating_input()),
+            red: Some(
+                board
+                    .led_red
+                    .into_push_pull_output_in_state(hal::gpio::PinState::Low),
+            ),
+            green: board
+                .led_green
+                .into_push_pull_output_in_state(hal::gpio::PinState::Low),
+            blue: board
+                .led_blue
+                .into_push_pull_output_in_state(hal::gpio::PinState::Low),
+            fan: Some(fan),
+            resets: pac_peripherals.RESETS,
+        };
+
+        ret.init();
+
+        Some(ret)
+    }
+
+    /// Initializer function, called from `take()` once
+    fn init(&mut self) {
+        // self.red.as_ref_mut().unwrap().set_high().unwrap();
+        self.green.set_high().unwrap();
+        self.blue.set_high().unwrap();
+
+        // Globally enable interrupts at the very end before returning to main
+        unsafe {
+            cortex_m::interrupt::enable();
+        }
+    }
+
+    /// Consume ADC and provide constructed HAL structure
+    pub fn take_adc(&mut self) -> Option<Adc> {
+        let converter = self.adc.take()?;
+        Some(Adc::new(converter, &mut self.resets))
+    }
+
+    /// Deinitialize ADC and restore the resource to this
+    pub fn put_adc(&mut self, adc: Adc) {
+        let converter = adc.free();
+        self.adc.replace(converter);
     }
 }
 
@@ -223,12 +236,13 @@ unsafe fn USBCTRL_IRQ() {
         USB_SEND_STATUS_PENDING.store(false, Ordering::SeqCst);
 
         // if command was received, overwrite buffer contents with a response instead
-        let duty_percentish = (u32::from(CURRENT_DUTY) * 10000) / PWM_TICKS;
+        let duty_percentish = 0;
+        // let duty_percentish = (u32::from(CURRENT_DUTY) * 10000) / PWM_TICKS;
         let duty_pct = duty_percentish / 100;
         let duty_decimals = duty_percentish % 100;
         writeln!(
             report_buf,
-            "T: {CURRENT_TEMP:02}°C, D: {duty_pct:3}.{duty_decimals:02}%"
+            "T: 0°C, D: {duty_pct:3}.{duty_decimals:02}%" // "T: {CURRENT_TEMP:02}°C, D: {duty_pct:3}.{duty_decimals:02}%"
         )
         .unwrap();
 
