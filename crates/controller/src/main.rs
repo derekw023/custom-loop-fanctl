@@ -10,7 +10,8 @@ use bsp::entry;
 use cortex_m::prelude::*;
 use panic_halt as _;
 
-mod timers;
+mod control_loop;
+mod usb;
 mod util;
 
 use controller_lib::dsp;
@@ -23,7 +24,8 @@ fn main() -> ! {
     let mut peripherals = util::ControllerPeripherals::take().unwrap();
 
     // Hand off peripherals to the subsystems that need them
-    timers::setup(&mut peripherals);
+    control_loop::setup(&mut peripherals);
+    usb::setup(&mut peripherals);
 
     loop {
         peripherals.watchdog.feed();

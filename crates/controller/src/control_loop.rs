@@ -4,7 +4,7 @@
 use crate::{
     dsp::MovingAverage,
     util::{self, ControllerPeripherals, ControllerStatusPin, FanPin, ThermistorPin},
-    HEARTBEAT_PERIOD, STATUS_PERIOD,
+    HEARTBEAT_PERIOD,
 };
 use controller_lib::{Degrees, FanCurve};
 
@@ -13,7 +13,7 @@ use pimoroni_tiny2040 as bsp;
 use bsp::hal;
 use hal::{
     adc::AdcPin,
-    timer::{Alarm, Alarm0, Alarm2},
+    timer::{Alarm, Alarm0},
 };
 use hal::{pac::interrupt, Adc};
 
@@ -23,7 +23,6 @@ use embedded_hal::{
 };
 
 static mut ACTIVE_LOOP: Option<ControlLoop> = None;
-static mut ALARM2: Option<Alarm2> = None;
 
 struct ControlLoop {
     // Data for fan controller
@@ -45,20 +44,9 @@ pub(crate) fn setup(controller: &mut ControllerPeripherals) {
     control_loop_alarm.schedule(HEARTBEAT_PERIOD).unwrap();
     control_loop_alarm.enable_interrupt();
 
-    // USB timer (TODO move out)
-    let mut status_timer = controller.timer.alarm_2().unwrap();
-    status_timer.schedule(STATUS_PERIOD).unwrap();
-    status_timer.enable_interrupt();
-
-    unsafe {
-        ALARM2 = Some(status_timer);
-    }
-
     unsafe {
         hal::pac::NVIC::unmask(hal::pac::interrupt::TIMER_IRQ_0);
-        hal::pac::NVIC::unmask(hal::pac::interrupt::TIMER_IRQ_2);
     }
-
     let adc = controller.take_adc().unwrap();
 
     let thermistor = AdcPin::new(controller.thermistor_pin.take().unwrap()).unwrap();
@@ -108,6 +96,8 @@ impl ControlLoop {
 
         // Apply output
         self.fan.set_duty_cycle(self.current_duty).unwrap();
+
+        // TODO send something to USB IRQ
     }
 }
 
@@ -119,16 +109,4 @@ unsafe fn TIMER_IRQ_0() {
         // Do the processing in a safe function
         current_loop.update();
     }
-}
-
-// Alarm 1 timer, used only for scheduling events for the USB IRQ right now
-#[allow(non_snake_case)]
-#[interrupt]
-unsafe fn TIMER_IRQ_2() {
-    let status_timer = ALARM2.as_mut().unwrap_unchecked();
-
-    status_timer.clear_interrupt();
-    status_timer.schedule(STATUS_PERIOD).unwrap();
-    crate::util::USB_SEND_STATUS_PENDING.store(true, core::sync::atomic::Ordering::Relaxed);
-    hal::pac::NVIC::pend(hal::pac::interrupt::USBCTRL_IRQ);
 }
