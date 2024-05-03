@@ -1,4 +1,3 @@
 [workspace]
 members = ["crates/*"]
-exclude = ["crates/controller"]
 resolver = "2"
