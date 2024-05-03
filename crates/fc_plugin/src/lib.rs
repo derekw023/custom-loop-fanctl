@@ -20,8 +20,8 @@ impl SimpleService {
         Ok(Self { some_value })
     }
 
-    pub fn maybe_fails(&self, x: u32) -> Result<u32, Error> {
-        Ok(x)
+    pub fn maybe_fails(&self, x: u32) -> Result<(), Error> {
+        Ok(())
     }
 
     #[ffi_service_method(on_panic = "return_default")]
