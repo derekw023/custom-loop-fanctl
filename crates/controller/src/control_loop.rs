@@ -2,6 +2,7 @@
 //! Right now just a timer each for poking USB (may eventually move this) and a timer for driving the fan curve
 //! If the USB stuff is exfiltrated into ta USB crate (it should be) then this will just become the fan controller mod
 use crate::{
+    adc::AdcToken,
     dsp::MovingAverage,
     util::{self, ControllerPeripherals, ControllerStatusPin, FanPin, ThermistorPin},
     HEARTBEAT_PERIOD,
@@ -11,11 +12,11 @@ use controller_lib::{Degrees, FanCurve};
 use pimoroni_tiny2040 as bsp;
 
 use bsp::hal;
+use hal::pac::interrupt;
 use hal::{
     adc::AdcPin,
     timer::{Alarm, Alarm0},
 };
-use hal::{pac::interrupt, Adc};
 
 use embedded_hal::{
     digital::{OutputPin, StatefulOutputPin},
@@ -33,7 +34,7 @@ struct ControlLoop {
     // HW resources
     status_led: ControllerStatusPin,
     thermistor_pin: AdcPin<ThermistorPin>,
-    adc: Adc,
+    adc: AdcToken,
     loop_timer: Alarm0,
     fan: FanPin,
 }
@@ -44,10 +45,11 @@ pub(crate) fn setup(controller: &mut ControllerPeripherals) {
     control_loop_alarm.schedule(HEARTBEAT_PERIOD).unwrap();
     control_loop_alarm.enable_interrupt();
 
+    // Can't schedule this until it won't panic
     // unsafe {
     //     hal::pac::NVIC::unmask(hal::pac::interrupt::TIMER_IRQ_0);
     // }
-    let adc = controller.take_adc().unwrap();
+    let adc = crate::adc::configure_adc(controller).unwrap();
 
     let thermistor = AdcPin::new(controller.thermistor_pin.take().unwrap()).unwrap();
 
@@ -87,8 +89,10 @@ impl ControlLoop {
 
         // Read ADC, filter, convert to temperature and apply fan curve
         // TODO: this won't work
-        // let conversion = self.adc.read_single();
+        // let conversion = self.adc.;
         let conversion: u16 = unimplemented!("conversion");
+
+        // Initiate an ADC conversion
 
         // CURRENT_TEMP = TEMP.update(conversion);
         let current_temp = self.temperature.update(conversion.into());

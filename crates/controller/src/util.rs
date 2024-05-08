@@ -15,7 +15,7 @@ use hal::{
     },
     pac,
     pwm::{Channel, FreeRunning, Pwm2, Slice, A},
-    Adc, Clock, Timer, Watchdog,
+    Clock, Timer, Watchdog,
 };
 
 // this must be configured for 25khz
@@ -146,17 +146,5 @@ impl ControllerPeripherals {
         unsafe {
             cortex_m::interrupt::enable();
         }
-    }
-
-    /// Consume ADC and provide constructed HAL structure
-    pub fn take_adc(&mut self) -> Option<Adc> {
-        let converter = self.adc.take()?;
-        Some(Adc::new(converter, &mut self.resets))
-    }
-
-    /// Deinitialize ADC and restore the resource to this
-    pub fn put_adc(&mut self, adc: Adc) {
-        let converter = adc.free();
-        self.adc.replace(converter);
     }
 }
