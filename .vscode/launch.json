@@ -31,16 +31,20 @@
             "serverpath": "C:\\Program Files\\SEGGER\\JLink\\JLinkGDBServerCL.exe",
             "interface": "swd",
             "device": "RP2040_M0_0",
-            "runToMain": true,
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 4
+            },
+            // "runToEntryPoint": true
             "preRestartCommands": [
                 "load",
                 "enable breakpoint",
                 "monitor reset"
             ],
-            "preLaunchTask": "rust: cargo build",
+            // "preLaunchTask": "rust: cargo build",
             "svdFile": "./rp2040.svd",
             "rttConfig": {
-                "enabled": true,
+                "enabled": false,
                 "address": "auto",
                 // "clearSearch": false    // OpenOCD users may have to un-comment this
                 "decoders": [
