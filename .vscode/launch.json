@@ -5,24 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Remote lldb",
-            "type": "lldb",
-            "request": "custom",
-            "preLaunchTask": "build and flash",
-            "targetCreateCommands": [
-                "target create ${cargo:program}"
-            ],
-            "processCreateCommands": [
-                "gdb-remote localhost:2331"
-            ],
-            "cargo": {
-                "args": [
-                    "build"
-                ],
-            }
-        },
-        {
-            "name": "cmdebug",
+            "name": "JLink",
             "cwd": "${workspaceRoot}",
             "executable": "./target/thumbv6m-none-eabi/debug/custom-loop-fanctl",
             "request": "launch",
@@ -31,18 +14,19 @@
             "serverpath": "C:\\Program Files\\SEGGER\\JLink\\JLinkGDBServerCL.exe",
             "interface": "swd",
             "device": "RP2040_M0_0",
+            "ipAddress": "127.0.0.1",
             "liveWatch": {
                 "enabled": true,
                 "samplesPerSecond": 4
             },
-            // "runToEntryPoint": true
+            "runToEntryPoint": "main",
             "preRestartCommands": [
                 "load",
                 "enable breakpoint",
                 "monitor reset"
             ],
-            // "preLaunchTask": "rust: cargo build",
-            "svdFile": "./rp2040.svd",
+            "preLaunchTask": "Build Controller Firmware",
+            "svdFile": "./crates/controller/rp2040.svd",
             "rttConfig": {
                 "enabled": false,
                 "address": "auto",

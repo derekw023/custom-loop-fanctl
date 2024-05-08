@@ -4,11 +4,14 @@
 		{
 			"type": "cargo",
 			"command": "build",
+			"options": {
+				"cwd": "crates\\controller"
+			},
 			"problemMatcher": [
 				"$rustc"
 			],
 			"group": "build",
-			"label": "rust: cargo build"
+			"label": "Build Controller Firmware"
 		},
 		{
 			"label": "gdb flash",

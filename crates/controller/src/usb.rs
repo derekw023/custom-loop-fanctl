@@ -1,5 +1,4 @@
 use crate::util::ControllerPeripherals;
-use crate::STATUS_PERIOD;
 
 use bsp::hal;
 use core::{

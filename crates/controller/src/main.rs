@@ -7,9 +7,9 @@ use pimoroni_tiny2040 as bsp;
 
 use bsp::entry;
 
-use cortex_m::prelude::*;
 use panic_halt as _;
 
+mod adc;
 mod control_loop;
 mod usb;
 mod util;

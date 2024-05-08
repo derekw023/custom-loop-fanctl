@@ -31,12 +31,28 @@ impl FanCurve<u16> {
         let slope = (i64::from(diff) << 24) / (i64::from(max_temp.0) - i64::from(min_temp.0));
         let int: i64 = (i64::from(min_duty) << 12) - ((slope * i64::from(min_temp.0)) >> 12);
 
+        let m = if slope > i32::MAX.into() {
+            i32::MAX
+        } else if slope < i32::MIN.into() {
+            i32::MIN
+        } else {
+            unsafe { i32::try_from(slope).unwrap_unchecked() }
+        };
+
+        let b = if int > i32::MAX.into() {
+            i32::MAX
+        } else if int < i32::MIN.into() {
+            i32::MIN
+        } else {
+            unsafe { i32::try_from(int).unwrap_unchecked() }
+        };
+
         // Fan curve now operates on F12 fixed point math
         FanCurve {
             max_duty,
             min_duty,
-            m: i32::try_from(slope).expect("slope calculation error"),
-            b: i32::try_from(int).expect("y-int calculation error"),
+            m,
+            b,
         }
     }
 
