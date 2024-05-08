@@ -20,14 +20,14 @@ pub(crate) const STATUS_PERIOD: fugit::MicrosDurationU32 = fugit::MicrosDuration
 
 #[entry]
 fn main() -> ! {
-    let mut peripherals = util::ControllerPeripherals::take().unwrap();
+    let mut peripherals = util::ControllerPeripherals::take(false).unwrap();
 
     // Hand off peripherals to the subsystems that need them
     control_loop::setup(&mut peripherals);
     usb::setup(&mut peripherals);
 
     loop {
-        peripherals.watchdog.feed();
+        // peripherals.watchdog.feed();
 
         // event loop
         cortex_m::asm::wfi();

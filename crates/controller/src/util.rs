@@ -51,7 +51,7 @@ pub struct ControllerPeripherals {
 #[allow(clippy::cast_possible_truncation)]
 impl ControllerPeripherals {
     /// Make the instance of this singleton, return None if somehow called twice
-    pub fn take() -> Option<Self> {
+    pub fn take(start_watchdog: bool) -> Option<Self> {
         let mut pac_peripherals = hal::pac::Peripherals::take()?;
         let core = hal::pac::CorePeripherals::take()?;
 
@@ -70,7 +70,9 @@ impl ControllerPeripherals {
 
         // Watchdog init for hangup prevention, only allow panic up to 1 second
         watchdog.pause_on_debug(true);
-        watchdog.start(1.secs());
+        if start_watchdog {
+            watchdog.start(1.secs());
+        }
 
         let systick_delay =
             cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());

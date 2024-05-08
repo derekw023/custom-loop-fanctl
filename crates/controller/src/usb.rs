@@ -23,6 +23,9 @@ static mut ALARM2: Option<Alarm2> = None;
 static mut USB_DEVICE: Option<UsbDevice<UsbBus>> = None;
 static mut USB_SERIAL: Option<SerialPort<UsbBus>> = None;
 
+// Poll every 10ms
+const USB_PERIOD: fugit::MicrosDurationU32 = fugit::MicrosDurationU32::Hz(100);
+
 pub static USB_SEND_STATUS_PENDING: AtomicBool = AtomicBool::new(false);
 
 pub(crate) fn setup(controller: &mut ControllerPeripherals) {
@@ -42,11 +45,18 @@ pub(crate) fn setup(controller: &mut ControllerPeripherals) {
     };
 
     let serial = SerialPort::new(bus_ref);
-    let usb_dev = UsbDeviceBuilder::new(bus_ref, UsbVidPid(0x16c0, 0x27dd)).build();
+    let usb_dev = UsbDeviceBuilder::new(bus_ref, UsbVidPid(0x16c0, 0x27dd))
+        .strings(&[StringDescriptors::default()
+            .manufacturer("DEXCORP")
+            .product("Dex Fan Controller")
+            .serial_number("FOO")])
+        .unwrap()
+        .device_class(2) // from: https://www.usb.org/defined-class-codes
+        .build();
 
     // Timer init, to schedule polls
     let mut status_timer = controller.timer.alarm_2().unwrap();
-    status_timer.schedule(STATUS_PERIOD).unwrap();
+    status_timer.schedule(USB_PERIOD).unwrap();
     status_timer.enable_interrupt();
 
     unsafe {
@@ -56,7 +66,7 @@ pub(crate) fn setup(controller: &mut ControllerPeripherals) {
     }
 
     unsafe {
-        hal::pac::NVIC::unmask(hal::pac::interrupt::TIMER_IRQ_2);
+        // hal::pac::NVIC::unmask(hal::pac::interrupt::TIMER_IRQ_2);
         hal::pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
     }
 }
@@ -68,7 +78,7 @@ unsafe fn TIMER_IRQ_2() {
     let status_timer = ALARM2.as_mut().unwrap_unchecked();
 
     status_timer.clear_interrupt();
-    status_timer.schedule(STATUS_PERIOD).unwrap();
+    status_timer.schedule(USB_PERIOD).unwrap();
     USB_SEND_STATUS_PENDING.store(true, core::sync::atomic::Ordering::Relaxed);
     hal::pac::NVIC::pend(hal::pac::interrupt::USBCTRL_IRQ);
 }

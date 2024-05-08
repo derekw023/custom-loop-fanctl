@@ -44,9 +44,9 @@ pub(crate) fn setup(controller: &mut ControllerPeripherals) {
     control_loop_alarm.schedule(HEARTBEAT_PERIOD).unwrap();
     control_loop_alarm.enable_interrupt();
 
-    unsafe {
-        hal::pac::NVIC::unmask(hal::pac::interrupt::TIMER_IRQ_0);
-    }
+    // unsafe {
+    //     hal::pac::NVIC::unmask(hal::pac::interrupt::TIMER_IRQ_0);
+    // }
     let adc = controller.take_adc().unwrap();
 
     let thermistor = AdcPin::new(controller.thermistor_pin.take().unwrap()).unwrap();
