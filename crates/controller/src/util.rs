@@ -3,8 +3,7 @@
 //! Realistically... too much. controller init code here should be in the controller, usb should be in usb, what's left (if anything) should remain here
 use cortex_m::delay::Delay;
 
-use bsp::hal;
-use pimoroni_tiny2040 as bsp;
+use crate::bsp::hal;
 
 use embedded_hal::digital::OutputPin;
 use fugit::ExtU32;
@@ -37,8 +36,9 @@ pub struct ControllerPeripherals {
     pub systick_delay: Delay,
     /// Can be used to take ownership of timers and alarms
     pub timer: Timer,
-    /// Hold the ADC, to allow it to be taken
-    pub adc: Option<hal::pac::ADC>,
+    /// Hold some peripheral blocks, to allow them to be taken
+    pub adc: Option<pac::ADC>,
+    pub dma: Option<pac::DMA>,
     pub thermistor_pin: Option<ThermistorPin>,
     pub red: Option<ControllerStatusPin>,
     pub green: Pin<Gpio19, FunctionSio<SioOutput>, PullDown>,
@@ -58,7 +58,7 @@ impl ControllerPeripherals {
         let mut watchdog = hal::Watchdog::new(pac_peripherals.WATCHDOG);
 
         let clocks = hal::clocks::init_clocks_and_plls(
-            bsp::XOSC_CRYSTAL_FREQ,
+            crate::bsp::XOSC_CRYSTAL_FREQ,
             pac_peripherals.XOSC,
             pac_peripherals.CLOCKS,
             pac_peripherals.PLL_SYS,
@@ -79,7 +79,7 @@ impl ControllerPeripherals {
 
         let sio = hal::Sio::new(pac_peripherals.SIO);
         // now that USB is done with it take ownership of these for the BSP
-        let board: bsp::Pins = bsp::Pins::new(
+        let board: crate::bsp::Pins = crate::bsp::Pins::new(
             pac_peripherals.IO_BANK0,
             pac_peripherals.PADS_BANK0,
             sio.gpio_bank0,
@@ -130,6 +130,7 @@ impl ControllerPeripherals {
                 pac_peripherals.USBCTRL_REGS,
                 clocks.usb_clock,
             )),
+            dma: Some(pac_peripherals.DMA),
         };
 
         ret.init();

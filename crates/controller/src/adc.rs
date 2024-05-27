@@ -1,32 +1,27 @@
-use rp2040_hal::{adc::AdcFifo, Adc};
+use rp2040_hal::{
+    adc::{Adc, AdcFifo},
+    pac::{ADC, RESETS},
+};
 
-use crate::util::ControllerPeripherals;
-
-static ADC_FIFO: Option<AdcFifo<u16>> = None;
-
-pub struct AdcToken {
-    placeholder_sample: u16,
+pub struct Token<'a> {
+    adc: Adc,
+    adc_fifo: AdcFifo<'a, u16>,
 }
 
-/// Consume ADC and provide constructed HAL structure
-pub fn configure_adc(peripherals: &mut ControllerPeripherals) -> Option<AdcToken> {
-    let converter = peripherals.adc.take()?;
-    let fifo = Adc::new(converter, &mut peripherals.resets)
-        .build_fifo()
-        .enable_dma()
-        .start_paused();
+impl Token<'_> {
+    /// Consume ADC and provide constructed HAL structure (adc will be paused)
+    pub fn new(adc: ADC, resets: &mut RESETS) -> Option<Self> {
+        // 1024 sps by USB clock trusting the documented factors
+        let mut adc = Adc::new(adc, resets);
+        let fifo = adc
+            .build_fifo()
+            .clock_divider(46874, 0)
+            .enable_dma()
+            .start_paused();
 
-    unsafe { ADC_FIFO = Some(fifo) }
-
-    Some(AdcToken {
-        placeholder_sample: 0,
-    })
-}
-
-pub fn start_dma() {
-    unimplemented!()
-}
-
-fn dma_irq() {
-    unimplemented!()
+        Some(Token {
+            adc,
+            adc_fifo: fifo,
+        })
+    }
 }
