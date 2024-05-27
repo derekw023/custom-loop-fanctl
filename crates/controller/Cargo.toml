@@ -1,5 +1,5 @@
 [package]
-name = "custom-loop-fanctl"
+name = "controller"
 version = "0.1.0"
 authors = ["Dex Witt <dex@witt.me>"]
 edition = "2021"

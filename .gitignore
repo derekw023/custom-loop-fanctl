@@ -2,3 +2,4 @@ target/
 Cargo.lock
 .DS_Store
 .vscode/.cortex-debug.*.state.json
+.vs
