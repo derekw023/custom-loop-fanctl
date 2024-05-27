@@ -5,7 +5,7 @@ VisualStudioVersion = 17.5.002.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "fc-plugin", "fc-plugin", "{07084674-AF58-4F62-8E75-94655FCE86AD}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DexControllerSensor", "fc-plugin\DexControllerSensor\DexControllerSensor.csproj", "{6E6517F5-D972-4A8B-884F-016B57276972}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DexControllerSensor", "fc-plugin\DexControllerSensor\DexControllerSensor.csproj", "{8C13BDD5-F4D8-4397-B6E7-6C8ABD01963B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -13,16 +13,16 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{6E6517F5-D972-4A8B-884F-016B57276972}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{6E6517F5-D972-4A8B-884F-016B57276972}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{6E6517F5-D972-4A8B-884F-016B57276972}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{6E6517F5-D972-4A8B-884F-016B57276972}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8C13BDD5-F4D8-4397-B6E7-6C8ABD01963B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8C13BDD5-F4D8-4397-B6E7-6C8ABD01963B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8C13BDD5-F4D8-4397-B6E7-6C8ABD01963B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8C13BDD5-F4D8-4397-B6E7-6C8ABD01963B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{6E6517F5-D972-4A8B-884F-016B57276972} = {07084674-AF58-4F62-8E75-94655FCE86AD}
+		{8C13BDD5-F4D8-4397-B6E7-6C8ABD01963B} = {07084674-AF58-4F62-8E75-94655FCE86AD}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {CAC2CDB4-3A31-4699-986D-DA4B69178F1F}

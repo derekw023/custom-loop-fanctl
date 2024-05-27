@@ -1,9 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AssemblyName>FanControl.DexSensor</AssemblyName>
+    <BaseOutputPath>C:\Users\DEX\repos\custom-loop-fanctl\fc-plugin\DexControllerSensor\bin</BaseOutputPath>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="FanControl.Plugins, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
