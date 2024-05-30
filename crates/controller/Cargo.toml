@@ -16,15 +16,17 @@ panic = 'abort'
 panic = 'abort'
 
 [dependencies]
-cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
+cortex-m = { version = "0.7.7", default-features = false, features = [
+    "critical-section-single-core",
+] }
 cortex-m-rt = { version = "0.7.3", features = ["set-vtor", "set-sp", "device"] }
 # defmt-serial = "0.6.0"
 embedded-hal = "1.0.0"
 fugit = { version = "0.3.7" }
 panic-halt = "0.2.0"
-rp2040-hal = { version = "0.10.0" }
+rp2040-hal = { version = "0.10" }
 usb-device = { version = "^0.3" }
-usbd-serial = "0.2.1"
+usbd-serial = "0.2"
 heapless = "^0.8"
 controller_lib = { path = "../controller_lib" }
 
