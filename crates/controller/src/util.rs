@@ -132,18 +132,14 @@ impl ControllerPeripherals {
             )),
             dma: Some(pac_peripherals.DMA),
         };
-
-        ret.init();
+        ret.green.set_high().unwrap();
 
         Some(ret)
     }
 
     /// Initializer function, called from `take()` once
-    fn init(&mut self) {
-        self.green.set_high().unwrap();
+    pub fn unmask_interrupts(&mut self) {
         self.blue.set_high().unwrap();
-
-        // Globally enable interrupts at the very end before returning to main
         unsafe {
             cortex_m::interrupt::enable();
         }

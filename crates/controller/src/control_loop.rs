@@ -1,109 +1,140 @@
 //! Generally, timers and timed events in the system
 //! Right now just a timer each for poking USB (may eventually move this) and a timer for driving the fan curve
 //! If the USB stuff is exfiltrated into ta USB crate (it should be) then this will just become the fan controller mod
+use core::borrow::BorrowMut;
+
 use crate::{
     adc,
+    bsp::hal::{
+        adc::{AdcFifo, DmaReadTarget},
+        dma::{single_buffer::Config, single_buffer::Transfer, Channel, SingleChannel, CH0},
+        pac::interrupt,
+    },
+    dma,
     dsp::MovingAverage,
-    util::{ControllerPeripherals, ControllerStatusPin, FanPin, ThermistorPin},
-    HEARTBEAT_PERIOD,
+    util::{ControllerStatusPin, FanPin},
 };
 use controller_lib::{Degrees, FanCurve};
 
-use pimoroni_tiny2040 as bsp;
-
-use bsp::hal;
-use hal::pac::interrupt;
-use hal::{adc::AdcPin, timer::Alarm};
-
+use cortex_m::interrupt::{CriticalSection, Mutex};
 use embedded_hal::{
     digital::{OutputPin, StatefulOutputPin},
     pwm::SetDutyCycle,
 };
 
-// Singleton pointer for IRQ
-static ACTIVE_LOOP: Option<ControlLoop> = None;
+// Singletons
+type DmaBuf = [u16; 32];
+static mut ACTIVE_LOOP: Option<ControlLoop> = None;
+static mut DMA_BUFFER: DmaBuf = [0; 32];
 
 struct ControlLoop {
-    // Data for fan controller
+    // Data for fan controller. optional to allow for not connecting any output, to only sense temperature
     curve: Option<FanCurve<u16>>,
     current_duty: u16,
-    temperature: MovingAverage<Degrees>,
+    // temperature: MovingAverage<Degrees>,
 
     // HW resources
     status_led: ControllerStatusPin,
-    thermistor_pin: AdcPin<ThermistorPin>,
 
     // Loop is scheduled by DMA interrupts and also ADC interval
     // that connection is ideally configured in this module
     // loop_timer: Alarm0,
     fan: Option<FanPin>,
+
+    /// DMA transfer things, access buffer through static
+    transfer: Transfer<Channel<CH0>, DmaReadTarget<u16>, &'static mut [u16; 32]>,
+
+    // Circular buffer fields that are modified from interrupt context
+    buffer_idx: Mutex<usize>,
+    data_valid: Mutex<bool>,
 }
 
 pub(crate) struct Token {
     handle: &'static ControlLoop,
 }
-
 // Alarm 0 timer, used for fan control stuff
 #[allow(non_snake_case)]
 #[interrupt]
-unsafe fn TIMER_IRQ_0() {
+unsafe fn DMA_IRQ_0() {
     if let Some(current_loop) = ACTIVE_LOOP.as_mut() {
+        let cs = unsafe { CriticalSection::new() };
+
         // Do the processing in a safe function
-        current_loop.update();
+        current_loop.update(&cs);
     }
 }
 
 impl Token {
     pub(crate) fn new<'a>(
-        controller: &mut ControllerPeripherals,
-        adc: &adc::Token,
+        adc: &mut adc::Token,
+        dma: &mut dma::Token,
+        status_led: crate::util::ControllerStatusPin,
     ) -> Option<Self> {
-        if ACTIVE_LOOP.is_some() {
-            return None;
+        unsafe {
+            if ACTIVE_LOOP.is_some() {
+                return None;
+            }
         }
 
-        // setup the fan controller to run on a timer
-        let mut control_loop_alarm = controller.timer.alarm_0().unwrap();
-        control_loop_alarm.schedule(HEARTBEAT_PERIOD).unwrap();
-        control_loop_alarm.enable_interrupt();
+        // Configure DMA against the static reference
+        let mut chan = dma.take_ch0()?;
+        chan.enable_irq0();
 
-        // Can't schedule this until it won't panic
-        // unsafe {
-        //     hal::pac::NVIC::unmask(hal::pac::interrupt::TIMER_IRQ_0);
-        // }
-
-        let thermistor = AdcPin::new(controller.thermistor_pin.take().unwrap()).unwrap();
-
-        let controller = ControlLoop {
-            current_duty: 0,
-            fan: None,
-            // fan: controller.fan.take().unwrap(),
-            temperature: MovingAverage::new(),
-            // curve: FanCurve::new(
-            //     u16::try_from(util::PWM_TICKS).unwrap(),
-            //     u16::try_from((util::PWM_TICKS * 2) / 10).unwrap(),
-            //     Degrees::from_int(48),
-            //     Degrees::from_int(35),
-            // ),
-            curve: None,
-            status_led: controller.red.take().unwrap(),
-            thermistor_pin: thermistor,
-        };
+        // DMA transfer
+        let cfg: Config<Channel<CH0>, DmaReadTarget<u16>, &mut [u16; 32]> =
+            Config::new(chan, adc.adc_fifo.dma_read_target(), unsafe {
+                &mut DMA_BUFFER
+            });
+        let trans = cfg.start();
 
         let handle = unsafe {
-            ACTIVE_LOOP = Some(controller);
-            ACTIVE_LOOP.as_ref().unwrap_unchecked()
+            ACTIVE_LOOP = Some(ControlLoop {
+                current_duty: 0,
+                fan: None,
+                // fan: controller.fan.take().unwrap(),
+                // temperature: MovingAverage::new(),
+                // curve: FanCurve::new(
+                //     u16::try_from(util::PWM_TICKS).unwrap(),
+                //     u16::try_from((util::PWM_TICKS * 2) / 10).unwrap(),
+                //     Degrees::from_int(48),
+                //     Degrees::from_int(35),
+                // ),
+                curve: None,
+                status_led,
+                transfer: trans,
+                buffer_idx: Mutex::new(0),
+                data_valid: Mutex::new(false),
+            });
+            ACTIVE_LOOP.as_mut().unwrap_unchecked()
         };
+
+        adc.adc_fifo.resume();
 
         Some(Self { handle })
     }
+
+    pub fn current_temp(&self) -> Degrees {
+        // Critical Section for consistency
+        let sum: i32 = cortex_m::interrupt::free(|cs| unsafe {
+            DMA_BUFFER.iter().fold(0i32, |mut acc, i| {
+                acc += i32::try_from(*i).unwrap();
+                acc
+            })
+        });
+
+        // Don't actually need to glance buffer idx
+        let average = sum / 32;
+
+        Degrees::from_int(average.try_into().unwrap())
+    }
 }
+
 impl ControlLoop {
     /// Loop update function, called on every new sample
     ///
     /// ADC conversion and data accumulation is done entirely in hw
-    /// This could be called on dMA interrupt but could also be run asynchronously on the main thread after the sample lands
-    fn update(&mut self) {
+    /// Needs a critical section to lock asynchronously updated fields
+    fn update(&mut self, cs: &CriticalSection) {
         // // heartbeat at half the real operating frequency
         if self.status_led.is_set_high().unwrap() {
             self.status_led.set_low().unwrap();
@@ -111,22 +142,24 @@ impl ControlLoop {
             self.status_led.set_high().unwrap();
         }
 
-        let conversion = 0u16;
-
-        // Temperature conversion from ADC counts by From<u16> and also circular buffer based moving average advance
-        // TODO: perform moving average on u16 samples instead of Degrees
-        // TODO: perform moving average calculation on demand instead of on sample... far fewer operations
-        let current_temp = self.temperature.update(conversion.into());
-
-        // Set outputs if configured
-        if let Some(ref curve) = self.curve {
-            self.current_duty = curve.fan_curve(current_temp);
-
-            if let Some(ref fan) = self.fan {
-                fan.set_duty_cycle(self.current_duty).unwrap()
-            }
+        // Maintain circular buffer ptr
+        let buffer_idx: &mut usize = &mut self.buffer_idx.get_mut(cs);
+        *buffer_idx = *buffer_idx + 1;
+        if *buffer_idx >= 32 {
+            let valid = &mut self.data_valid.get_mut(cs);
+            **valid = true;
+            *buffer_idx = 0;
         }
 
-        // TODO if udb needs a shared data buffer updated or something
+        // Set outputs if configured
+        // if let Some(ref curve) = self.curve {
+        //     // self.current_duty = curve.fan_curve(current_temp);
+
+        //     if let Some(ref mut fan) = self.fan {
+        //         fan.set_duty_cycle(self.current_duty).unwrap()
+        //     }
+        // }
+
+        // TODO if usb needs a shared data buffer updated or something
     }
 }

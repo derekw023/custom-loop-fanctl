@@ -23,18 +23,25 @@ use controller_lib::dsp;
 
 #[entry]
 fn main() -> ! {
-    let mut peripherals = util::ControllerPeripherals::take(false).unwrap();
+    let mut peripherals = util::ControllerPeripherals::take(true).unwrap();
 
-    let dma = dma::Token::new(peripherals.dma.take().unwrap(), &mut peripherals.resets);
+    let mut dma = dma::Token::new(peripherals.dma.take().unwrap(), &mut peripherals.resets);
 
-    let adc = adc::Token::new(peripherals.adc.take().unwrap(), &mut peripherals.resets).unwrap();
+    let mut adc = adc::Token::new(
+        peripherals.adc.take().unwrap(),
+        &mut peripherals.resets,
+        peripherals.thermistor_pin.take().unwrap(),
+    )
+    .unwrap();
 
-    // Hand off peripherals to the subsystems that need them
-    let controller = control_loop::Token::new(&mut peripherals, &adc);
+    // Initialize objects with the peripherals craeted before
+    let controller = control_loop::Token::new(&mut adc, &mut dma, peripherals.red.take().unwrap());
     usb::setup(&mut peripherals);
 
+    peripherals.unmask_interrupts();
+
     loop {
-        // peripherals.watchdog.feed();
+        peripherals.watchdog.feed();
 
         // event loop
         cortex_m::asm::wfi();
