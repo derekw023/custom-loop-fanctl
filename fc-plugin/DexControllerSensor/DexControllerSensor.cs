@@ -56,7 +56,10 @@ namespace FanControl.DexControllerSensor
             } catch (SystemException ex) 
             {
                 logger.Log("Exception while reading serial port: " + ex.Message);
-                if (ex.Message == "The port is closed.") { port = null; }
+                if (ex.Message == "The port is closed.") { 
+                    // could totally retry here and only null it out in the case that retrying goes very poorly (any reason not to just retry opening the port indef? need to open by something better than port NAME fgdi
+                    port = null; 
+                }
             }
             
             if (sensor_temp != null)
