@@ -1,19 +1,22 @@
 use crate::bsp;
 use bsp::hal::pac::{DMA, RESETS};
-use rp2040_hal::dma::{Channel, DMAExt, DynChannels};
+use rp2040_hal::dma::{Channel as HalChannel, DMAExt, DynChannels};
 
 pub(crate) struct Token {
     pub channels: DynChannels,
 }
 
+pub(crate) struct Channel {}
+
 macro_rules! impl_ch_take {
     ($implname:ident, $dmach:ident, $chbignum:tt) => {
-        pub(crate) fn $implname(&mut self) -> Option<Channel<$crate::bsp::hal::dma::$chbignum>> {
+        pub(crate) fn $implname(&mut self) -> Option<HalChannel<$crate::bsp::hal::dma::$chbignum>> {
             self.channels.$dmach.take()
         }
     };
 }
 
+#[allow(unused)]
 impl Token {
     pub(crate) fn new(dma: DMA, resets: &mut RESETS) -> Self {
         let channels = dma.dyn_split(resets);
