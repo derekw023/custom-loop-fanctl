@@ -3,5 +3,6 @@
     "rust-analyzer.linkedProjects": [
         "crates/controller/Cargo.toml",
         "crates/gui/Cargo.toml"
-    ]
+    ],
+    "cmake.configureOnOpen": false
 }
