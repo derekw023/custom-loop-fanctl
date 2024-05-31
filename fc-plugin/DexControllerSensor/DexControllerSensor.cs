@@ -1,4 +1,4 @@
-using System.IO.Ports;
+﻿using System.IO.Ports;
 using FanControl.Plugins;
 
 namespace FanControl.DexControllerSensor
@@ -56,15 +56,21 @@ namespace FanControl.DexControllerSensor
             {
                 port?.WriteLine("t");
                 msg = port?.ReadLine();
-                if (msg != null) { logger.Log(msg); }
             }
             catch (SystemException ex)
             {
                 logger.Log("Exception while reading serial port: " + ex.Message);
                 if (ex.Message == "The port is closed.")
                 {
-                    // could totally retry here and only null it out in the case that retrying goes very poorly (any reason not to just retry opening the port indef? need to open by something better than port NAME fgdi
-                    port = null;
+
+                    try
+                    {
+                        port?.Open();
+                    }
+                    catch (IOException eex)
+                    {
+                        logger.Log($"Failed to open serial port with exception {eex}");
+                    }
                 }
             }
 
@@ -73,11 +79,20 @@ namespace FanControl.DexControllerSensor
                 if (sensor_temp != null && msg != null)
                 {
                     sensor_temp.Value = Int32.Parse(msg);
+                } else if (sensor_temp != null)
+                {
+                    // Fail safe
+                    sensor_temp.Value = 50;
                 }
             }
             catch (FormatException e)
             {
-                logger.Log(e.Message);
+                logger.Log(e.Message); 
+                if (sensor_temp != null)
+                {
+                    // Fail safe
+                    sensor_temp.Value = 50;
+                }
             }
         }
     }
