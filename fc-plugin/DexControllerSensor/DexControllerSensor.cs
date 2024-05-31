@@ -36,7 +36,6 @@ namespace FanControl.DexControllerSensor
             catch (IOException ex)
             {
                 logger.Log($"Failed to open serial port with exception {ex}");
-                port = null;
             }
 
         }
@@ -54,9 +53,12 @@ namespace FanControl.DexControllerSensor
             string? msg = null;
             try
             {
+                // "t" requests a new temperature reading. May eventually protobuf or json this if more sensors materialize
                 port?.WriteLine("t");
                 msg = port?.ReadLine();
             }
+            // If the serial port doesn't work, attempt to recover it
+            // Fail safe behavior lower down is triggered by the message here not being changed from null
             catch (SystemException ex)
             {
                 logger.Log("Exception while reading serial port: " + ex.Message);
@@ -79,18 +81,24 @@ namespace FanControl.DexControllerSensor
                 if (sensor_temp != null && msg != null)
                 {
                     sensor_temp.Value = Int32.Parse(msg);
-                } else if (sensor_temp != null)
+                    // fail safe in case of loose wire (results in negative reading)
+                    if (sensor_temp.Value < 0)
+                    {
+                        sensor_temp.Value = 50;
+                    }
+                }
+                else if (sensor_temp != null)
                 {
-                    // Fail safe
+                    // Fail safe in case of null message
                     sensor_temp.Value = 50;
                 }
             }
             catch (FormatException e)
             {
-                logger.Log(e.Message); 
+                logger.Log(e.Message);
                 if (sensor_temp != null)
                 {
-                    // Fail safe
+                    // Fail safe in case of parse exception
                     sensor_temp.Value = 50;
                 }
             }
