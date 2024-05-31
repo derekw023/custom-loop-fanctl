@@ -1,4 +1,4 @@
-﻿using System.IO.Ports;
+using System.IO.Ports;
 using FanControl.Plugins;
 
 namespace FanControl.DexControllerSensor
@@ -10,8 +10,8 @@ namespace FanControl.DexControllerSensor
         static SerialPort? port;
 
         WaterSensor? sensor_temp;
-        private IPluginLogger logger;
-        private IPluginDialog dialog;
+        private readonly IPluginLogger logger;
+        private readonly IPluginDialog dialog;
 
 
         public void Close()
