@@ -1,6 +1,7 @@
-use crate::util::ControllerPeripherals;
+use crate::{control_loop, util::ControllerPeripherals};
 
 use bsp::hal;
+use controller_lib::Degrees;
 use core::{
     fmt::Write,
     sync::atomic::{AtomicBool, Ordering},
@@ -21,13 +22,14 @@ static mut ALARM2: Option<Alarm2> = None;
 // USB Singletons
 static mut USB_DEVICE: Option<UsbDevice<UsbBus>> = None;
 static mut USB_SERIAL: Option<SerialPort<UsbBus>> = None;
+static mut ACTIVE_LOOP: Option<control_loop::Token> = None;
 
 // Poll every 10ms
 const USB_PERIOD: fugit::MicrosDurationU32 = fugit::MicrosDurationU32::Hz(100);
 
 pub static USB_SEND_STATUS_PENDING: AtomicBool = AtomicBool::new(false);
 
-pub(crate) fn setup(controller: &mut ControllerPeripherals) {
+pub(crate) fn setup(controller: &mut ControllerPeripherals, sampling_loop: control_loop::Token) {
     let (dpram, regs, usb_clock) = controller.usb_peripherals.take().unwrap();
     // Initialize USB bus
     let usb_bus = UsbBusAllocator::new(hal::usb::UsbBus::new(
@@ -59,13 +61,14 @@ pub(crate) fn setup(controller: &mut ControllerPeripherals) {
     status_timer.enable_interrupt();
 
     unsafe {
-        ALARM2 = Some(status_timer);
+        ALARM2.replace(status_timer);
         USB_SERIAL.replace(serial);
         USB_DEVICE.replace(usb_dev);
+        ACTIVE_LOOP.replace(sampling_loop);
     }
 
     unsafe {
-        // hal::pac::NVIC::unmask(hal::pac::interrupt::TIMER_IRQ_2);
+        hal::pac::NVIC::unmask(hal::pac::interrupt::TIMER_IRQ_2);
         hal::pac::NVIC::unmask(hal::pac::Interrupt::USBCTRL_IRQ);
     }
 }
@@ -78,7 +81,7 @@ unsafe fn TIMER_IRQ_2() {
 
     status_timer.clear_interrupt();
     status_timer.schedule(USB_PERIOD).unwrap();
-    USB_SEND_STATUS_PENDING.store(true, core::sync::atomic::Ordering::Relaxed);
+    // USB_SEND_STATUS_PENDING.store(true, core::sync::atomic::Ordering::Relaxed);
     hal::pac::NVIC::pend(hal::pac::interrupt::USBCTRL_IRQ);
 }
 
@@ -115,17 +118,14 @@ unsafe fn USBCTRL_IRQ() {
     let pending = USB_SEND_STATUS_PENDING.load(Ordering::Relaxed);
     if pending {
         USB_SEND_STATUS_PENDING.store(false, Ordering::SeqCst);
+        let current_temp = if let Some(controller) = unsafe { ACTIVE_LOOP.as_ref() } {
+            controller.current_temp()
+        } else {
+            Degrees(0)
+        };
 
         // if command was received, overwrite buffer contents with a response instead
-        let duty_percentish = 0;
-        // let duty_percentish = (u32::from(CURRENT_DUTY) * 10000) / PWM_TICKS;
-        let duty_pct = duty_percentish / 100;
-        let duty_decimals = duty_percentish % 100;
-        writeln!(
-            report_buf,
-            "T: 0°C, D: {duty_pct:3}.{duty_decimals:02}%" // "T: {CURRENT_TEMP:02}°C, D: {duty_pct:3}.{duty_decimals:02}%"
-        )
-        .unwrap();
+        writeln!(report_buf, "{current_temp:02}").unwrap();
 
         let mut wr_ptr = report_buf.as_bytes();
         while !wr_ptr.is_empty() {

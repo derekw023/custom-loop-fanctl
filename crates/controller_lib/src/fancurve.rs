@@ -48,7 +48,7 @@ impl FanCurve<u16> {
         };
 
         // Fan curve now operates on F12 fixed point math
-        FanCurve {
+        Self {
             max_duty,
             min_duty,
             m,

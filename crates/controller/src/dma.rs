@@ -6,8 +6,6 @@ pub(crate) struct Token {
     pub channels: DynChannels,
 }
 
-pub(crate) struct Channel {}
-
 macro_rules! impl_ch_take {
     ($implname:ident, $dmach:ident, $chbignum:tt) => {
         pub(crate) fn $implname(&mut self) -> Option<HalChannel<$crate::bsp::hal::dma::$chbignum>> {

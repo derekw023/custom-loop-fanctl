@@ -7,8 +7,6 @@
 
 use panic_halt as _;
 pub(crate) use pimoroni_tiny2040 as bsp;
-pub(crate) const HEARTBEAT_PERIOD: fugit::MicrosDurationU32 = fugit::MicrosDurationU32::Hz(100);
-pub(crate) const STATUS_PERIOD: fugit::MicrosDurationU32 = fugit::MicrosDurationU32::Hz(1);
 
 // Imports
 mod adc;
@@ -19,11 +17,11 @@ mod util;
 
 // Use statements for main
 use bsp::entry;
-use controller_lib::dsp;
 
 #[entry]
 fn main() -> ! {
-    let mut peripherals = util::ControllerPeripherals::take(true).unwrap();
+    let mut peripherals = util::ControllerPeripherals::take(false).unwrap();
+    let red = peripherals.red.take().unwrap();
 
     let mut dma = dma::Token::new(peripherals.dma.take().unwrap(), &mut peripherals.resets);
 
@@ -34,9 +32,9 @@ fn main() -> ! {
     )
     .unwrap();
 
-    // Initialize objects with the peripherals craeted before
-    let controller = control_loop::Token::new(&mut adc, &mut dma, peripherals.red.take().unwrap());
-    usb::setup(&mut peripherals);
+    // Initialize objects with the peripherals created before
+    let controller = control_loop::Token::new(&mut adc, &mut dma, red).unwrap();
+    usb::setup(&mut peripherals, controller);
 
     peripherals.unmask_interrupts();
 

@@ -2,7 +2,7 @@ use core::convert::Into;
 use core::fmt::Display;
 
 /// Type for holding temperature readings with context, in a fixed point manner
-#[derive(PartialEq, PartialOrd, Copy, Clone, Default)]
+#[derive(PartialEq, Eq, PartialOrd, Copy, Clone, Default)]
 // Valid representation range: -128-128C
 // so 8 integer bits. 23 fractional bits
 pub struct Degrees(pub i32);
@@ -15,12 +15,12 @@ impl Degrees {
 }
 
 // Conversion of ADC readings to degrees is specific to ADC config and circuit implementation, provide here a conversion that specifies our circuit
-impl From<u16> for Degrees {
+impl From<i64> for Degrees {
     /// Create a new `Degrees` from a 12-bit ADC read of a thermistor in a 10k voltage divider
-    fn from(val: u16) -> Self {
+    fn from(val: i64) -> Self {
         // R1 integer format
         // log2 of this is 14
-        const R1: u32 = 10_000;
+        const R1: i64 = 10_000;
 
         // IR = V, construct voltage divider equation
         // (VDD / (R1 + Rt)) * Rt = Vin = val_volts * VDD
@@ -39,8 +39,9 @@ impl From<u16> for Degrees {
         // val came out of a 12 bit ADC, it is F12 (number of fractional bits)
 
         // Scale by 12 to counteract the scaling of the divisor, though that puts us in a u64
-        let r_fixed: i64 = ((<u16 as Into<i64>>::into(val) * <u32 as Into<i64>>::into(R1)) << 12)
-            / ((1 << 12) - <u16 as Into<i64>>::into(val));
+        let divisor: i64 = (1 << 12) - val;
+        let quotient: i64 = (val * R1) << 12;
+        let r_fixed: i64 = quotient / divisor;
 
         // scaling in r_fixed is 12 fractional bits now.
 
@@ -62,16 +63,17 @@ impl From<u16> for Degrees {
         let temperature = unsafe { i32::try_from(temperature).unwrap_unchecked() };
 
         // F12 in is F12 out when the coefficients are scaled appropriately
-        Degrees(temperature)
+        Self(temperature)
     }
 }
 
-impl From<Degrees> for u32 {
-    fn from(val: Degrees) -> u32 {
+impl TryFrom<Degrees> for u32 {
+    type Error = &'static str;
+    fn try_from(val: Degrees) -> Result<Self, Self::Error> {
         if val.0 < 0 {
-            0
+            Ok(0)
         } else {
-            unsafe { <i32 as core::convert::TryInto<u32>>::try_into(val.0).unwrap_unchecked() }
+            Self::try_from(val.0).map_err(|_e| "infallible?")
         }
     }
 }

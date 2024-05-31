@@ -7,7 +7,7 @@ use crate::util::ThermistorPin;
 
 pub struct Token<'a> {
     pub adc_fifo: AdcFifo<'a, u16>,
-    sensor_pin: AdcPin<ThermistorPin>,
+    _sensor_pin: AdcPin<ThermistorPin>,
 }
 
 static mut STATIC_ADC: Option<Adc> = None;
@@ -33,7 +33,7 @@ impl Token<'_> {
 
         Some(Token {
             adc_fifo: fifo,
-            sensor_pin,
+            _sensor_pin: sensor_pin,
         })
     }
 }
